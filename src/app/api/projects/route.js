@@ -1,7 +1,10 @@
+import { authorizeApi } from '@/lib/api-access';
 import { NextResponse } from 'next/server'
 import { prisma } from '@/lib/prisma'
 
 export async function POST(request) {
+  const { session, error: accessError } = await authorizeApi(request);
+  if (accessError) return accessError;
   try {
     const data = await request.json()
     const { code, name, client, location, contractValue, startDate, endDate } = data
@@ -28,6 +31,6 @@ export async function POST(request) {
     if (error.code === 'P2002') {
       return NextResponse.json({ error: 'Project code already exists' }, { status: 400 })
     }
-    return NextResponse.json({ error: error.message }, { status: 500 })
+    return NextResponse.json({ error: 'Terjadi kesalahan pada server.' }, { status: 500 })
   }
 }

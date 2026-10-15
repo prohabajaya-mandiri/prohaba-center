@@ -1,10 +1,14 @@
+import { authorizeApi } from '@/lib/api-access';
 import { NextResponse } from 'next/server'
 import { prisma } from '@/lib/prisma'
 
 export async function POST(request) {
+  const { session, error: accessError } = await authorizeApi(request);
+  if (accessError) return accessError;
   try {
     const data = await request.json()
-    const { projectId, purchaseDate, description, vendor, unit, quantity, unitPrice, refPrice, notes, userId } = data
+    const { projectId, purchaseDate, description, vendor, unit, quantity, unitPrice, refPrice, notes } = data
+    const userId = session.user.id
     
     if (!projectId || !description || !vendor || !unit || quantity === undefined || unitPrice === undefined) {
       return NextResponse.json({ error: 'Missing required fields' }, { status: 400 })
@@ -60,6 +64,6 @@ export async function POST(request) {
 
     return NextResponse.json(sitePurchase)
   } catch (error) {
-    return NextResponse.json({ error: error.message }, { status: 500 })
+    return NextResponse.json({ error: 'Terjadi kesalahan pada server.' }, { status: 500 })
   }
 }

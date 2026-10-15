@@ -1,11 +1,12 @@
+import { authorizeApi } from '@/lib/api-access';
 import { NextResponse } from 'next/server';
 import { prisma } from '@/lib/prisma';
-import { auth } from '@/lib/auth';
 
 
 export async function GET(request) {
+  const { session, error: accessError } = await authorizeApi(request);
+  if (accessError) return accessError;
   try {
-    const session = await auth();
     if (!session) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
 
     const invoices = await prisma.salesInvoice.findMany({
@@ -26,8 +27,9 @@ export async function GET(request) {
 }
 
 export async function POST(request) {
+  const { session, error: accessError } = await authorizeApi(request);
+  if (accessError) return accessError;
   try {
-    const session = await auth();
     if (!session) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
 
     const data = await request.json();

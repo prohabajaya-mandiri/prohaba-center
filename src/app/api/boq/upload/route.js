@@ -1,7 +1,7 @@
+import { authorizeApi } from '@/lib/api-access';
 import { NextResponse } from 'next/server';
 import * as XLSX from 'xlsx';
 import { prisma } from '@/lib/prisma';
-import { auth } from '@/lib/auth';
 
 // Determine hierarchy level from code like A, A.1, A.1.a, A.1.a.1, B.I, B.I.1, Sub Total A
 function parseCodeLevel(code) {
@@ -19,8 +19,9 @@ function parseCodeLevel(code) {
 }
 
 export async function POST(req) {
+  const { session, error: accessError } = await authorizeApi(req);
+  if (accessError) return accessError;
   try {
-    const session = await auth();
     if (!session) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
 
     const formData = await req.formData();
@@ -31,6 +32,9 @@ export async function POST(req) {
       return NextResponse.json({ error: 'projectId dan file diperlukan' }, { status: 400 });
     }
 
+    if (typeof file.arrayBuffer !== 'function' || file.size > 4 * 1024 * 1024 || !/\.xlsx?$/i.test(file.name)) {
+      return NextResponse.json({ error: 'File Excel maksimum 4 MB.' }, { status: 400 });
+    }
     const buffer = Buffer.from(await file.arrayBuffer());
     const wb = XLSX.read(buffer, { type: 'buffer' });
     const ws = wb.Sheets[wb.SheetNames[0]];

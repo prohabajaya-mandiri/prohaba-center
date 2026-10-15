@@ -2,6 +2,9 @@ import { prisma } from '../src/lib/prisma.js';
 import bcrypt from 'bcryptjs';
 
 async function main() {
+  if (process.env.NODE_ENV === 'production' || process.env.VERCEL || new URL(process.env.DATABASE_URL).searchParams.get('schema') !== 'prohaba_dev' || process.env.ALLOW_DESTRUCTIVE_DEMO_SEED !== 'true') {
+    throw new Error('Demo seed hanya boleh pada schema prohaba_dev dengan ALLOW_DESTRUCTIVE_DEMO_SEED=true.');
+  }
   console.log('🌱 Seeding database ERP Prohaba Jaya Mandiri...');
 
   // Clean existing data (ignore errors on first run)
@@ -317,5 +320,5 @@ async function main() {
 }
 
 main()
-  .catch(console.error)
+  .catch((error) => { console.error(error.message); process.exitCode = 1; })
   .finally(() => prisma.$disconnect());

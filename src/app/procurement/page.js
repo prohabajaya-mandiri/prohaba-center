@@ -1,3 +1,4 @@
+import { canAccess } from '@/lib/access';
 import { auth } from '@/lib/auth';
 import { redirect } from 'next/navigation';
 import { prisma } from '@/lib/prisma';
@@ -6,6 +7,8 @@ import ProcurementClient from './ProcurementClient';
 
 export default async function ProcurementPage() {
   const session = await auth();
+  if (!session?.user) redirect('/login');
+  if (!canAccess(session.user.role, '/procurement')) redirect('/dashboard');
   if (!session) redirect('/login');
 
   const purchaseOrders = await prisma.purchaseOrder.findMany({
@@ -20,7 +23,7 @@ export default async function ProcurementPage() {
 
   const materialRequests = await prisma.materialRequest.findMany({
     where: { status: 'APPROVED' },
-    include: { project: true, items: true, requester: true }
+    include: { project: true, items: true, requester: { select: { id: true, name: true, role: true } } }
   });
 
   const vendors = await prisma.vendor.findMany({

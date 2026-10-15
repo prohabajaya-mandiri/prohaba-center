@@ -1,17 +1,22 @@
+import { ROLES } from '@/lib/access';
+import { authorizeApi } from '@/lib/api-access';
 import { NextResponse } from 'next/server';
 import { prisma } from '@/lib/prisma';
-import { auth } from '@/lib/auth';
 import bcrypt from 'bcryptjs';
 
 export async function POST(req) {
+  const { session, error: accessError } = await authorizeApi(req);
+  if (accessError) return accessError;
   try {
-    const session = await auth();
     if (!session || session.user.role !== 'TOP_MANAGEMENT') {
       return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
     }
 
     const body = await req.json();
     const { name, email, password, role } = body;
+    if (!ROLES.includes(role) || (password !== undefined && password !== "" && (typeof password !== "string" || password.length < 12 || Buffer.byteLength(password) > 72))) {
+      return NextResponse.json({ error: "Role tidak valid atau password harus 12–72 byte." }, { status: 400 });
+    }
 
     if (!name || !email || !password || !role) {
       return NextResponse.json({ error: 'Data tidak lengkap' }, { status: 400 });
@@ -46,8 +51,8 @@ export async function POST(req) {
       }
     });
 
-    return NextResponse.json(user, { status: 201 });
+    return NextResponse.json({ id: user.id, name: user.name, email: user.email, role: user.role, isActive: user.isActive }, { status: 201 });
   } catch (error) {
-    return NextResponse.json({ error: error.message }, { status: 500 });
+    return NextResponse.json({ error: 'Terjadi kesalahan pada server.' }, { status: 500 });
   }
 }

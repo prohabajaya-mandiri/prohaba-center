@@ -1,3 +1,5 @@
+import { redirect } from 'next/navigation';
+import { canAccess } from '@/lib/access';
 import { auth } from '@/auth';
 import { prisma } from '@/lib/prisma';
 import LogistikClient from './LogistikClient';
@@ -9,6 +11,8 @@ export const metadata = {
 
 export default async function LogistikPage() {
   const session = await auth();
+  if (!session?.user) redirect('/login');
+  if (!canAccess(session.user.role, '/logistik')) redirect('/dashboard');
   
   const vehicles = await prisma.vehicle.findMany({
     orderBy: { createdAt: 'desc' }
@@ -18,7 +22,7 @@ export default async function LogistikPage() {
     include: {
       vehicle: true,
       project: true,
-      user: true,
+      user: { select: { id: true, name: true, role: true } },
     },
     orderBy: { date: 'desc' }
   });
@@ -27,7 +31,7 @@ export default async function LogistikPage() {
     include: {
       vehicle: true,
       project: true,
-      user: true,
+      user: { select: { id: true, name: true, role: true } },
     },
     orderBy: { date: 'desc' }
   });

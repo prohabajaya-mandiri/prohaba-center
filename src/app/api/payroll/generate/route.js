@@ -1,22 +1,15 @@
+import { authorizeApi } from '@/lib/api-access';
 import { NextResponse } from 'next/server'
 import { prisma } from '@/lib/prisma'
 
 export async function POST(request) {
+  const { session, error: accessError } = await authorizeApi(request);
+  if (accessError) return accessError;
   try {
     const data = await request.json()
     const { projectId, period } = data // period: YYYY-MM
 
-    // Simulate logged in user
-    const user = await prisma.user.findFirst({
-      where: { role: 'HRD' }
-    })
-    
-    // Fallback if no HRD user exists
-    const adminUser = user || await prisma.user.findFirst()
-
-    if (!adminUser) {
-      return NextResponse.json({ error: 'User not found' }, { status: 401 })
-    }
+    const adminUser = session.user
 
     // Determine start and end date for the period
     const [year, month] = period.split('-')

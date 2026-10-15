@@ -1,5 +1,5 @@
 // ERP PT. Prohaba Jaya Mandiri
-// Database Schema — Prisma + SQLite
+// Database Schema — Prisma + Supabase PostgreSQL
 
 generator client {
   provider   = "prisma-client-js"
@@ -165,6 +165,14 @@ model Document {
 
   project  Project @relation(fields: [projectId], references: [id], onDelete: Cascade)
   uploader User    @relation(fields: [uploadedBy], references: [id])
+  content  DocumentContent?
+}
+
+// shortcut: Small private files live in Postgres; move to object storage for larger uploads.
+model DocumentContent {
+  documentId String @id
+  data       Bytes
+  document   Document @relation(fields: [documentId], references: [id], onDelete: Cascade)
 }
 
 // ─── MATERIAL REQUEST ─────────────────────────────────────────────────────────

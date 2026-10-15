@@ -1,19 +1,15 @@
+import { authorizeApi } from '@/lib/api-access';
 import { NextResponse } from 'next/server'
 import { prisma } from '@/lib/prisma'
 
 export async function POST(request) {
+  const { session, error: accessError } = await authorizeApi(request);
+  if (accessError) return accessError;
   try {
     const data = await request.json()
     const { date, employeeId, status, overtime, notes } = data
 
-    // Simulate logged in user
-    const user = await prisma.user.findFirst({
-      where: { role: 'PJO' }
-    })
-
-    if (!user) {
-      return NextResponse.json({ error: 'User not found' }, { status: 401 })
-    }
+    const user = session.user
 
     const attendance = await prisma.attendance.create({
       data: {

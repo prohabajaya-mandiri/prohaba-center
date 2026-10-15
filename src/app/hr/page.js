@@ -1,3 +1,4 @@
+import { canAccess } from '@/lib/access';
 import { prisma } from '@/lib/prisma'
 import HRClient from './HRClient'
 import { auth } from '@/lib/auth'
@@ -8,6 +9,8 @@ export const revalidate = 0
 
 export default async function HRPage() {
   const session = await auth();
+  if (!session?.user) redirect('/login');
+  if (!canAccess(session.user.role, '/hr')) redirect('/dashboard');
   if (!session) redirect('/login');
   const employees = await prisma.employee.findMany({
     include: {

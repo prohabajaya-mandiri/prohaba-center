@@ -6,6 +6,18 @@ import { authConfig } from "./auth.config"
 
 export const { handlers, signIn, signOut, auth } = NextAuth({
   ...authConfig,
+  // Vercel terminates HTTPS before forwarding requests to server components.
+  ...(process.env.VERCEL ? { useSecureCookies: true } : {}),
+  callbacks: {
+    ...authConfig.callbacks,
+    async jwt({ token, user }) {
+      const id = user?.id ?? token.id;
+      if (!id) return null;
+      const current = await prisma.user.findUnique({ where: { id }, select: { id: true, name: true, email: true, role: true, isActive: true } });
+      if (!current?.isActive) return null;
+      return { ...token, id: current.id, name: current.name, email: current.email, role: current.role };
+    },
+  },
   providers: [
     CredentialsProvider({
       name: 'Credentials',
@@ -14,7 +26,7 @@ export const { handlers, signIn, signOut, auth } = NextAuth({
         password: { label: "Password", type: "password" }
       },
       async authorize(credentials) {
-        if (!credentials?.email || !credentials?.password) {
+        if (typeof credentials?.email !== 'string' || typeof credentials?.password !== 'string' || credentials.password.length > 72) {
           return null
         }
 
@@ -22,7 +34,7 @@ export const { handlers, signIn, signOut, auth } = NextAuth({
           where: { email: credentials.email }
         })
 
-        if (!user || !user.password) {
+        if (!user || !user.isActive || !user.password) {
           return null
         }
 
@@ -43,5 +55,6 @@ export const { handlers, signIn, signOut, auth } = NextAuth({
   ],
   session: {
     strategy: "jwt",
+    maxAge: 8 * 60 * 60,
   }
 })

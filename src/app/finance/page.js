@@ -1,3 +1,4 @@
+import { canAccess } from '@/lib/access';
 import { auth } from '@/lib/auth';
 import { redirect } from 'next/navigation';
 import AppLayout from '@/components/AppLayout';
@@ -8,6 +9,8 @@ export const metadata = { title: 'Keuangan & Akuntansi (Accurate Mode) — ERP P
 
 export default async function FinancePage() {
   const session = await auth();
+  if (!session?.user) redirect('/login');
+  if (!canAccess(session.user.role, '/finance')) redirect('/dashboard');
   if (!session) redirect('/login');
 
   const glAccounts = await prisma.gLAccount.findMany({

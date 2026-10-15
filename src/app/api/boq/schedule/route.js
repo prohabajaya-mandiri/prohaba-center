@@ -1,11 +1,13 @@
+import { authorizeApi } from '@/lib/api-access';
 import { NextResponse } from 'next/server';
 import { prisma } from '@/lib/prisma';
-import { auth } from '@/lib/auth';
 
 
 
 // GET /api/boq/schedule?projectId=xxx — get all BOQ items with schedule
 export async function GET(req) {
+  const { session, error: accessError } = await authorizeApi(req);
+  if (accessError) return accessError;
   const { searchParams } = new URL(req.url);
   const projectId = searchParams.get('projectId');
   if (!projectId) return NextResponse.json({ error: 'projectId required' }, { status: 400 });
@@ -19,7 +21,8 @@ export async function GET(req) {
 
 // PUT /api/boq/schedule — update start/end month for items
 export async function PUT(req) {
-  const session = await auth();
+  const { session, error: accessError } = await authorizeApi(req);
+  if (accessError) return accessError;
   if (!session) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
 
   const { updates } = await req.json();

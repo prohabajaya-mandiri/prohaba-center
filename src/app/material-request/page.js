@@ -1,3 +1,4 @@
+import { canAccess } from '@/lib/access';
 import { auth } from '@/lib/auth';
 import { redirect } from 'next/navigation';
 import { prisma } from '@/lib/prisma';
@@ -6,12 +7,14 @@ import MaterialRequestClient from './MaterialRequestClient';
 
 export default async function MaterialRequestPage() {
   const session = await auth();
+  if (!session?.user) redirect('/login');
+  if (!canAccess(session.user.role, '/material-request')) redirect('/dashboard');
   if (!session) redirect('/login');
 
   const requests = await prisma.materialRequest.findMany({
     include: {
       project: true,
-      requester: true,
+      requester: { select: { id: true, name: true, role: true } },
       items: true,
     },
     orderBy: { createdAt: 'desc' }

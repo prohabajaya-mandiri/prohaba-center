@@ -1,3 +1,4 @@
+import { authorizeApi } from '@/lib/api-access';
 import { NextResponse } from 'next/server';
 import { prisma } from '@/lib/prisma';
 
@@ -9,6 +10,8 @@ import { prisma } from '@/lib/prisma';
  *  - scurveActual: [{month, actual}] — cumulative % aktual per bulan
  */
 export async function GET(req) {
+  const { session, error: accessError } = await authorizeApi(req);
+  if (accessError) return accessError;
   const { searchParams } = new URL(req.url);
   const projectId = searchParams.get('projectId');
   if (!projectId) return NextResponse.json({ error: 'projectId required' }, { status: 400 });

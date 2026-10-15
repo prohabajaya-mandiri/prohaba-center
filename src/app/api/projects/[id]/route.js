@@ -1,10 +1,11 @@
+import { authorizeApi } from '@/lib/api-access';
 import { NextResponse } from 'next/server';
 import { prisma } from '@/lib/prisma';
-import { auth } from '@/lib/auth';
 
 export async function DELETE(req, { params }) {
+  const { session, error: accessError } = await authorizeApi(req);
+  if (accessError) return accessError;
   try {
-    const session = await auth();
     if (!session) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
 
     if (session.user.role !== 'TOP_MANAGEMENT') {
@@ -26,8 +27,9 @@ export async function DELETE(req, { params }) {
 }
 
 export async function PATCH(req, { params }) {
+  const { session, error: accessError } = await authorizeApi(req);
+  if (accessError) return accessError;
   try {
-    const session = await auth();
     if (!session) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
 
     const { id } = await params;

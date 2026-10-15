@@ -1,3 +1,4 @@
+import { canAccess } from '@/lib/access';
 import { prisma } from '@/lib/prisma'
 import PayrollClient from './PayrollClient'
 import { auth } from '@/lib/auth'
@@ -8,6 +9,8 @@ export const revalidate = 0
 
 export default async function PayrollPage() {
   const session = await auth();
+  if (!session?.user) redirect('/login');
+  if (!canAccess(session.user.role, '/payroll')) redirect('/dashboard');
   if (!session) redirect('/login');
   const payrolls = await prisma.payroll.findMany({
     include: {
@@ -19,7 +22,7 @@ export default async function PayrollPage() {
       },
       approvals: {
         include: {
-          approver: true
+          approver: { select: { id: true, name: true, role: true } }
         },
         orderBy: {
           createdAt: 'desc'

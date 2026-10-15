@@ -1,11 +1,12 @@
+import { authorizeApi } from '@/lib/api-access';
 import { NextResponse } from 'next/server';
 import { prisma } from '@/lib/prisma';
-import { auth } from '@/lib/auth';
 
 export async function PATCH(req, { params }) {
+  const { session, error: accessError } = await authorizeApi(req);
+  if (accessError) return accessError;
   try {
     const { id } = await params;
-    const session = await auth();
     if (!session) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
 
     const body = await req.json();
@@ -16,13 +17,14 @@ export async function PATCH(req, { params }) {
 
     return NextResponse.json(updated);
   } catch (error) {
-    return NextResponse.json({ error: error.message }, { status: 500 });
+    return NextResponse.json({ error: 'Terjadi kesalahan pada server.' }, { status: 500 });
   }
 }
 
 export async function DELETE(req, { params }) {
+  const { session, error: accessError } = await authorizeApi(req);
+  if (accessError) return accessError;
   try {
-    const session = await auth();
     if (!session) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
 
     await prisma.fabricationOrder.delete({
@@ -31,6 +33,6 @@ export async function DELETE(req, { params }) {
 
     return NextResponse.json({ success: true });
   } catch (error) {
-    return NextResponse.json({ error: error.message }, { status: 500 });
+    return NextResponse.json({ error: 'Terjadi kesalahan pada server.' }, { status: 500 });
   }
 }

@@ -1,7 +1,10 @@
+import { authorizeApi } from '@/lib/api-access';
 import { NextResponse } from 'next/server'
 import { prisma } from '@/lib/prisma'
 
 export async function POST(request) {
+  const { session, error: accessError } = await authorizeApi(request);
+  if (accessError) return accessError;
   try {
     const data = await request.json()
     const { mrId, projectId, vendorId, items, deliveryNotes, issuedBy } = data
@@ -55,6 +58,6 @@ export async function POST(request) {
 
     return NextResponse.json(result)
   } catch (error) {
-    return NextResponse.json({ error: error.message }, { status: 500 })
+    return NextResponse.json({ error: 'Terjadi kesalahan pada server.' }, { status: 500 })
   }
 }

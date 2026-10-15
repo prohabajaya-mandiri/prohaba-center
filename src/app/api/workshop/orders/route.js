@@ -1,10 +1,11 @@
+import { authorizeApi } from '@/lib/api-access';
 import { NextResponse } from 'next/server';
 import { prisma } from '@/lib/prisma';
-import { auth } from '@/lib/auth';
 
 export async function GET(req) {
+  const { session, error: accessError } = await authorizeApi(req);
+  if (accessError) return accessError;
   try {
-    const session = await auth();
     if (!session) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
 
     const orders = await prisma.fabricationOrder.findMany({
@@ -18,13 +19,14 @@ export async function GET(req) {
 
     return NextResponse.json(orders);
   } catch (error) {
-    return NextResponse.json({ error: error.message }, { status: 500 });
+    return NextResponse.json({ error: 'Terjadi kesalahan pada server.' }, { status: 500 });
   }
 }
 
 export async function POST(req) {
+  const { session, error: accessError } = await authorizeApi(req);
+  if (accessError) return accessError;
   try {
-    const session = await auth();
     if (!session) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
 
     const body = await req.json();
@@ -44,6 +46,6 @@ export async function POST(req) {
 
     return NextResponse.json(newOrder, { status: 201 });
   } catch (error) {
-    return NextResponse.json({ error: error.message }, { status: 500 });
+    return NextResponse.json({ error: 'Terjadi kesalahan pada server.' }, { status: 500 });
   }
 }

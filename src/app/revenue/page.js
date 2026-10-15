@@ -1,3 +1,4 @@
+import { canAccess } from '@/lib/access';
 import { auth } from '@/lib/auth';
 import { redirect } from 'next/navigation';
 import AppLayout from '@/components/AppLayout';
@@ -7,6 +8,8 @@ import RevenueClient from './RevenueClient';
 
 export default async function RevenuePage() {
   const session = await auth();
+  if (!session?.user) redirect('/login');
+  if (!canAccess(session.user.role, '/revenue')) redirect('/dashboard');
   if (!session) redirect('/login');
   
   // Ambil data project dan invoices

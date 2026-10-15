@@ -1,7 +1,10 @@
+import { authorizeApi } from '@/lib/api-access';
 import { NextResponse } from 'next/server'
 import { prisma } from '@/lib/prisma'
 
 export async function GET(request) {
+  const { session, error: accessError } = await authorizeApi(request);
+  if (accessError) return accessError;
   try {
     const { searchParams } = new URL(request.url)
     const projectId = searchParams.get('projectId')
@@ -17,11 +20,13 @@ export async function GET(request) {
     
     return NextResponse.json(baselines)
   } catch (error) {
-    return NextResponse.json({ error: error.message }, { status: 500 })
+    return NextResponse.json({ error: 'Terjadi kesalahan pada server.' }, { status: 500 })
   }
 }
 
 export async function POST(request) {
+  const { session, error: accessError } = await authorizeApi(request);
+  if (accessError) return accessError;
   try {
     const data = await request.json()
     const { projectId, baselines } = data
@@ -45,6 +50,6 @@ export async function POST(request) {
 
     return NextResponse.json({ message: 'Baselines updated', count: created.count })
   } catch (error) {
-    return NextResponse.json({ error: error.message }, { status: 500 })
+    return NextResponse.json({ error: 'Terjadi kesalahan pada server.' }, { status: 500 })
   }
 }

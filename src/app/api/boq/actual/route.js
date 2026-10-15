@@ -1,11 +1,13 @@
+import { authorizeApi } from '@/lib/api-access';
 import { NextResponse } from 'next/server';
 import { prisma } from '@/lib/prisma';
-import { auth } from '@/lib/auth';
 
 
 
 // GET /api/boq/actual?projectId=xxx&month=2025-01
 export async function GET(req) {
+  const { session, error: accessError } = await authorizeApi(req);
+  if (accessError) return accessError;
   const { searchParams } = new URL(req.url);
   const projectId = searchParams.get('projectId');
   const month = searchParams.get('month');
@@ -20,7 +22,8 @@ export async function GET(req) {
 
 // POST /api/boq/actual — upsert realisasi bulan
 export async function POST(req) {
-  const session = await auth();
+  const { session, error: accessError } = await authorizeApi(req);
+  if (accessError) return accessError;
   if (!session) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
 
   const { boqItemId, projectId, month, volumeActual, costActual, progressPct, notes } = await req.json();
