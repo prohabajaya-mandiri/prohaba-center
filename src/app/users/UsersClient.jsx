@@ -1,4 +1,5 @@
 'use client'
+import { apiFetch } from '@/lib/client-api';
 
 import React, { useState } from 'react'
 import { motion, AnimatePresence } from 'framer-motion'
@@ -57,7 +58,7 @@ export default function UsersClient({ initialUsers }) {
       const method = editingId ? 'PUT' : 'POST'
       const url = editingId ? `/api/users/${editingId}` : '/api/users'
 
-      const res = await fetch(url, {
+      const res = await apiFetch(url, {
         method,
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify(formData)

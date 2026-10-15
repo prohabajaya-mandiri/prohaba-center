@@ -1,55 +1,68 @@
 # ERP Prohaba Jaya Mandiri
 
-Next.js 16.4.1, NextAuth, Prisma 7, dan Supabase PostgreSQL.
+Aplikasi Next.js 16, Auth.js, Prisma 7 dan Supabase PostgreSQL. Gunakan Node.js 22.
 
-## Menjalankan lokal
+## Menjalankan pengembangan
 
-Gunakan Node.js 22 atau lebih baru. Salin `.env.example` ke `.env` hanya jika belum memiliki `.env`, lalu isi kredensial aplikasi.
+File .env hanya berisi DATABASE_URL runtime development, AUTH_SECRET development dan AUTH_URL lokal. Token administrasi berada di .env.management.local. Jangan menyalin kredensial produksi ke .env.
 
-```sh
-npm ci
-npm run db:migrate
-npm run db:check
-npm run dev
-```
+    npm ci
+    npm run db:check
+    npm run dev
 
-`DATABASE_URL` menggunakan Supabase transaction pooler (port 6543). `DIRECT_URL` menggunakan session pooler (port 5432) untuk migrasi. Keduanya memakai role `prohaba_app`, TLS dengan verifikasi sertifikat penuh, dan CA publik di `prisma/certs/supabase-ca.crt`. Prisma CLI membaca path sertifikat relatif terhadap root proyek. Runtime memakai salinan CA publik yang dibundel pada src/lib/supabase-ca.js agar semua fungsi Vercel dapat memverifikasi TLS tanpa bergantung pada lokasi file.
+Database development memakai schema prohaba_dev dan role prohaba_runtime_dev. Produksi memakai schema public dan role prohaba_runtime. Keduanya bukan pemilik tabel, tidak dapat mengubah struktur, tidak dapat mengubah/menghapus AuditLog, dan harus melewati RLS. Otorisasi pengguna tetap diperiksa aplikasi pada setiap permintaan. Aplikasi tidak memakai Supabase Auth.
 
-CA berasal dari URL resmi yang digunakan dashboard Supabase:
-https://supabase-downloads.s3-ap-southeast-1.amazonaws.com/prod/ssl/prod-ca-2021.crt
+Koneksi memakai TLS dengan verifikasi sertifikat penuh. CA publik Supabase tersedia di prisma/certs/supabase-ca.crt dan dibundel untuk runtime. Kredensial tidak boleh memakai awalan NEXT_PUBLIC_.
 
-Prisma CLI memuat `.env` melalui `prisma.config.ts`. Next.js memuatnya otomatis. Jangan menambahkan awalan `NEXT_PUBLIC_` pada kredensial database atau token. Token pengelolaan `SUPABASE_TOKEN` dan `VERCEL_TOKEN` hanya untuk administrasi; keduanya tidak dibutuhkan aplikasi dan tidak diunggah ke Vercel.
+## Migrasi dan akun admin
 
-## Database dan deployment
+Kredensial migrasi prohaba_migrate_dev/prohaba_migrate hanya disimpan di .env.migrations.development.local dan .env.migrations.production.local. Akun ini mewarisi hak pemilik tabel untuk migrasi; login langsung pemilik lama sudah dinonaktifkan. Kedua file tidak dimuat otomatis oleh Next.js.
 
-Project Supabase: `prohaba-center` (`kdkoyvcdmwkrooywirzp`). Project Vercel: `prohaba-center`.
+    npm run db:migrate
+    npm run seed
 
-Environment production Vercel membutuhkan `DATABASE_URL`, `DIRECT_URL`, dan `AUTH_SECRET`. Development dan preview memakai schema prohaba_dev serta secret sesi terpisah dari production. Perubahan environment baru berlaku pada deployment berikutnya.
+Seeder hanya membuat admin development bila belum ada, dengan identitas Direktur Utama/admin@prohaba.co.id dan password acak di .env.admin.development.local. Seeder tidak menghapus data dan menolak produksi. Endpoint seed HTTP tetap nonaktif.
 
-```sh
-npm run db:migrate
-npm run build
-```
+Setelah migrasi menambah tabel, terapkan hak runtime dan RLS sebelum rilis:
 
-Migrasi awal membuat tabel ERP dan mengaktifkan RLS. Aplikasi mengakses tabel melalui role pemilik di server; tidak ada policy akses langsung untuk `anon` atau `authenticated` Supabase. Autentikasi tetap menggunakan NextAuth dan tabel `User`, bukan Supabase Auth.
+    node --env-file=.env.management.local --env-file=.env.migrations.development.local scripts/setup-runtime.mjs development
 
-Database baru tidak diisi data contoh atau akun dengan password bawaan. `npm run seed` adalah skrip demo lama yang **menghapus data**; jangan menjalankannya pada database aktif. Endpoint `/api/seed` dinonaktifkan (410). Siapkan akun admin dengan password kuat sebelum penggunaan aplikasi.
+Migrasi produksi harus dijalankan dengan file migrasi produksi, setelah backup, pengujian development dan build berhasil. Jangan memakai db push untuk database aktif.
 
-## Pengamanan deployment
+## Pemeriksaan sebelum rilis
 
-- Semua API bisnis memeriksa sesi aktif, izin modul, dan origin permintaan perubahan. Perubahan role atau penonaktifan akun berlaku pada pemeriksaan sesi berikutnya.
-- Persetujuan payroll memakai identitas login dan transisi status atomik; identitas pencatat tidak diambil dari request browser.
-- Dokumen privat dibatasi 4 MB dan disimpan di tabel DocumentContent, lalu diunduh melalui API berizin. Untuk volume/besar file meningkat, pindahkan ke object storage privat.
-- Development memakai role dan schema prohaba_dev yang terpisah dari production public. Kedua schema masih berbagi instance Supabase dan kapasitasnya.
-- .env menyimpan konfigurasi development dan token administrasi; .env.production.local menyimpan konfigurasi production, .env.admin.local menyimpan kredensial admin production. Semua diabaikan Git dan upload deployment.
-- Jalankan npm run dev untuk development. npm run build menggunakan environment production lokal; jangan memakai akun/data production untuk uji mutasi.
-- Seeder demo hanya dapat berjalan pada prohaba_dev dengan ALLOW_DESTRUCTIVE_DEMO_SEED=true; perintah ini tetap menghapus data development.
-- Jalankan npm test, npm run db:check, dan npm run build sebelum deploy.
+    npm run verify
+    npm audit
 
-Dependency runtime Next.js, Auth.js, dan SheetJS telah diperbarui. Audit masih melaporkan advisory pada dependency tooling Prisma/ESLint (deepmerge-ts, mysql2, braces); jangan menjalankan tooling pada konfigurasi atau pola glob yang tidak tepercaya. Pembaruan major paksa tidak dilakukan. Ini bukan hasil penetration test menyeluruh.
+Untuk pengujian HTTP lengkap, jalankan server di port 3105 dengan .env runtime development, lalu jalankan:
 
-Admin development memiliki password terpisah di .env.admin.development.local. Jalankan uji HTTP dengan node --env-file=.env.admin.local scripts/smoke.mjs https://prohaba-center.vercel.app. Uji role dan file privat pada development: node --env-file=.env scripts/dev-security.mjs http://localhost:3000 (server development harus berjalan). Data uji dibersihkan setelah pemeriksaan.
+    node --env-file=.env --env-file=.env.migrations.development.local scripts/integration.mjs http://localhost:3105
 
-Deployment production dilakukan langsung melalui Vercel API. Perubahan source masih lokal: commit dan push versi ini sebelum mengandalkan auto-deploy GitHub agar kode lama tidak menimpa pengamanan.
+Skrip integrasi menolak schema selain prohaba_dev. Skrip membuat data sementara untuk tujuh peran, menguji transaksi melalui akun runtime server, dan memakai akun migrasi hanya untuk fixture serta pembersihan. Jalankan pada database development yang tidak sedang dipakai pengujian lain.
 
-Verifikasi deployment terakhir: https://prohaba-center.vercel.app — login admin, dashboard, query database, penolakan API anonim, dan penolakan perubahan lintas-origin berhasil. Uji development juga memverifikasi pencabutan sesi akun nonaktif, larangan eskalasi role, serta siklus upload/unduh/hapus dokumen privat.
+Workflow .github/workflows/ci.yml menjalankan instalasi bersih, audit dependensi, lint, uji unit dan build pada Node 22. Pengujian integrasi Supabase dilakukan terpisah; CI tidak diberi kredensial database atau produksi.
+
+## Deployment Vercel
+
+Proyek Vercel: prohaba-center. Domain: https://prohaba-center.vercel.app.
+
+Production memerlukan DATABASE_URL runtime produksi, AUTH_SECRET produksi, dan AUTH_URL domain resmi. Development/preview memakai DATABASE_URL runtime development serta secret development yang berbeda. DIRECT_URL, SUPABASE_TOKEN, VERCEL_TOKEN, kredensial admin dan kunci backup tidak diperlukan runtime Vercel.
+
+Build menggunakan npm run verify. Perubahan source yang belum memiliki pemeriksaan ini harus gagal build agar tidak menimpa rilis yang sudah diperbaiki. Environment baru berlaku pada deployment baru.
+
+Source yang ada di workspace perlu disinkronkan ke GitHub agar CI dan auto-deploy memakai versi yang sama. Jangan mengirim .env*, .vercel, backup, node_modules atau .next ke repository.
+
+## Backup dan pemulihan
+
+    node --env-file=.env.migrations.production.local scripts/backup.mjs
+    node --env-file=.env.management.local scripts/restore-drill.mjs public
+
+Backup terenkripsi AES-256-GCM disimpan di .vercel/backups. Kunci lokal berada di .env.backup.local. Simpan salinan terenkripsi dan kuncinya pada lokasi cadangan terpisah yang aman. Tanpa kunci, backup tidak dapat dipulihkan.
+
+Restore drill memakai schema sementara, memeriksa jumlah dan isi baris, kemudian menghapus schema sementara. Struktur sumber harus sesuai versi saat backup dibuat. Pemulihan bencana harus menyiapkan struktur dari versi migrasi backup terlebih dahulu; jangan langsung menimpa database aktif. Backup lokal belum merupakan jadwal backup otomatis di luar mesin ini.
+
+## Penggunaan setelah perbaikan
+
+Finance menyiapkan mapping akun dan saldo awal melalui Master Data. HRD mengisi pegawai, penugasan dan tarif proyek sebelum payroll. Persetujuan dan pembayaran terpisah. Semua proyek terlihat sesuai izin modul; tidak ada isolasi anggota proyek.
+
+Rincian perubahan, bukti pengujian, batas kapasitas, dan kebijakan pencatatan ada di docs/remediation-2026-10-15.md. Payroll belum menghitung BPJS/PPh/potongan otomatis. Log BBM/perawatan baru masuk buku besar setelah dibuat faktur pembelian yang sesuai. Pembayaran pada aplikasi adalah pencatatan, bukan transfer bank.

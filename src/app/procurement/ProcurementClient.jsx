@@ -1,4 +1,5 @@
 'use client';
+import { apiFetch } from '@/lib/client-api';
 
 import { useState } from 'react';
 import { useRouter } from 'next/navigation';
@@ -7,6 +8,7 @@ import { useDialog } from '@/components/DialogProvider';
 
 export default function ProcurementClient({ purchaseOrders, materialRequests, vendors, user }) {
   const router = useRouter();
+  const [receipt,setReceipt]=useState(null),[receiptError,setReceiptError]=useState('');
   const [activeTab, setActiveTab] = useState('list');
   const [selectedMR, setSelectedMR] = useState(materialRequests[0] || null);
   const [selectedVendor, setSelectedVendor] = useState('');
@@ -50,19 +52,15 @@ export default function ProcurementClient({ purchaseOrders, materialRequests, ve
     try {
       const payload = {
         mrId: selectedMR.id,
-        projectId: selectedMR.projectId,
         vendorId: selectedVendor,
-        deliveryNotes,
-        issuedBy: user.id,
+        notes: deliveryNotes,
         items: poItems.map(item => ({
-          description: item.description,
-          unit: item.unit,
-          quantity: item.quantity,
+          mrItemId: item.id,
           unitPrice: item.unitPrice
         }))
       };
 
-      const res = await fetch('/api/procurement', {
+      const res = await apiFetch('/api/procurement', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify(payload)
@@ -103,12 +101,13 @@ export default function ProcurementClient({ purchaseOrders, materialRequests, ve
 
   return (
     <>
+      {receipt&&<div role="dialog" aria-modal="true" style={{position:'fixed',inset:0,background:'#0008',zIndex:9999,display:'grid',placeItems:'center',padding:20}}><form className="card" style={{padding:24,width:'min(600px,100%)',display:'grid',gap:12}} onSubmit={async e=>{e.preventDefault();setIsSubmitting(true);setReceiptError('');try{const form=new FormData(e.currentTarget);await apiFetch('/api/procurement/'+receipt.id+'/receive',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({reference:form.get('reference'),receivedAt:form.get('receivedAt'),items:receipt.items.map(i=>({id:i.id,quantity:Number(form.get(i.id)||0)})).filter(i=>i.quantity>0)})});setReceipt(null);router.refresh();}catch(err){setReceiptError(err.message);}finally{setIsSubmitting(false);}}}><h2>Penerimaan {receipt.poNumber}</h2>{receiptError&&<p role="alert">{receiptError}</p>}<label>Referensi bukti<input name="reference" className="form-input" required maxLength={200}/></label><label>Tanggal<input name="receivedAt" type="date" className="form-input" defaultValue={new Intl.DateTimeFormat('en-CA',{timeZone:'Asia/Makassar'}).format(new Date())} required/></label>{receipt.items.filter(i=>i.quantity>i.deliveredQty).map(i=><label key={i.id}>{i.description} (sisa {i.quantity-i.deliveredQty} {i.unit})<input name={i.id} type="number" className="form-input" min="0" max={i.quantity-i.deliveredQty} step="0.001" defaultValue={i.quantity-i.deliveredQty}/></label>)}<div><button className="btn btn-primary" disabled={isSubmitting}>Simpan penerimaan</button> <button type="button" className="btn btn-outline" disabled={isSubmitting} onClick={()=>setReceipt(null)}>Batal</button></div></form></div>}
       <div className="tabs">
         <button className={`tab ${activeTab === 'list' ? 'active' : ''}`} onClick={() => setActiveTab('list')}>
           <FileText size={16} className="inline-block mr-2" />
           Daftar Purchase Order
         </button>
-        {user.role === 'LOGISTIK' && (
+        {['TOP_MANAGEMENT','LOGISTIK'].includes(user.role) && (
           <button className={`tab ${activeTab === 'create' ? 'active' : ''}`} onClick={() => setActiveTab('create')}>
             <Plus size={16} className="inline-block mr-2" />
             Buat PO dari MR
@@ -146,7 +145,7 @@ export default function ProcurementClient({ purchaseOrders, materialRequests, ve
                       <td style={{ fontSize: 13, color: 'var(--gray-600)' }}>{po.mr?.mrNumber || '-'}</td>
                       <td style={{ fontSize: 12.5, color: 'var(--gray-500)' }}>{new Date(po.createdAt).toLocaleDateString('id-ID')}</td>
                       <td>
-                        <button className="btn btn-sm btn-outline">Lihat Detail</button>
+                        <button className="btn btn-sm btn-outline" onClick={()=>showAlert(po.items.map(i=>i.description+' — '+i.quantity+' '+i.unit+' (diterima '+i.deliveredQty+')').join('\n'),'Detail PO')}>Detail</button>{['TOP_MANAGEMENT','LOGISTIK'].includes(user.role)&&['CREATED','SENT','CONFIRMED','PARTIAL'].includes(po.status)&&<button className="btn btn-sm btn-primary" onClick={()=>{setReceipt(po);setReceiptError('');}}>Catat penerimaan</button>}
                       </td>
                     </tr>
                   ))

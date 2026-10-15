@@ -1,6 +1,7 @@
 import { PrismaClient } from '@prisma/client';
 import { PrismaPg } from '@prisma/adapter-pg';
 import { supabaseCa } from './supabase-ca.js';
+import { serialize } from './serialization.js';
 
 const globalForPrisma = globalThis;
 
@@ -21,8 +22,9 @@ function createPrismaClient() {
 
   return new PrismaClient({
     adapter,
+    omit: { user: { password: true } },
     log: process.env.NODE_ENV === 'development' ? ['error', 'warn'] : ['error'],
-  });
+  }).$extends({ query: { async $allOperations({ args, query }) { return serialize(await query(args)); } } });
 }
 
 export const prisma = globalForPrisma.prisma ?? createPrismaClient();

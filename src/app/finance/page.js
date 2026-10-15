@@ -1,57 +1,76 @@
-import { canAccess } from '@/lib/access';
-import { auth } from '@/lib/auth';
-import { redirect } from 'next/navigation';
-import AppLayout from '@/components/AppLayout';
-import FinanceClient from './FinanceClient';
-import { prisma } from '@/lib/prisma';
-
-export const metadata = { title: 'Keuangan & Akuntansi (Accurate Mode) — ERP Prohaba Jaya Mandiri' };
-
-export default async function FinancePage() {
+import { canAccess } from "@/lib/access";
+import { auth } from "@/lib/auth";
+import { redirect } from "next/navigation";
+import { prisma } from "@/lib/prisma";
+import {
+  balances,
+  profitability,
+  payablesSummary,
+} from "@/lib/services/reports";
+import AppLayout from "@/components/AppLayout";
+import ListPager from "@/components/ListPager";
+import { pageQuery } from "@/lib/page-query";
+import FinanceClient from "./FinanceClient";
+export default async function FinancePage({ searchParams }) {
   const session = await auth();
-  if (!session?.user) redirect('/login');
-  if (!canAccess(session.user.role, '/finance')) redirect('/dashboard');
-  if (!session) redirect('/login');
-
-  const glAccounts = await prisma.gLAccount.findMany({
-    orderBy: { accountNo: 'asc' }
-  });
-
-  const purchaseInvoices = await prisma.purchaseInvoice.findMany({
-    include: { vendor: true, project: true },
-    orderBy: { dueDate: 'asc' }
-  });
-
-  const salesInvoices = await prisma.salesInvoice.findMany({
-    include: { project: true },
-    orderBy: { date: 'asc' }
-  });
-
-  // Calculate project profitability based on salesInvoices & purchaseInvoices + generic expenses
-  const projects = await prisma.project.findMany();
-  const profitData = projects.map(p => {
-    const revenue = salesInvoices.filter(s => s.projectId === p.id).reduce((sum, s) => sum + s.amount, 0) || (p.contractValue / 4); // Dummy if no revenue
-    const cost = purchaseInvoices.filter(i => i.projectId === p.id).reduce((sum, i) => sum + i.totalAmount, 0) || (p.contractValue / 6); // Dummy if no cost
-    const profit = revenue - cost;
-    const margin = revenue > 0 ? (profit / revenue) * 100 : 0;
-    return {
-      project: p.code,
-      name: p.name,
-      kontrak: revenue / 1e6, // In Millions
-      biaya: cost / 1e6,
-      profit: profit / 1e6,
-      margin: Number(margin.toFixed(1))
-    };
-  });
-
+  if (!session?.user) redirect("/login");
+  if (!canAccess(session.user.role, "/finance")) redirect("/dashboard");
+  const paging = await pageQuery(searchParams);
+  const [
+    glAccounts,
+    profitData,
+    summary,
+    purchaseInvoices,
+    total,
+    orders,
+    projects,
+    vendors,
+  ] = await Promise.all([
+    balances(),
+    profitability(),
+    payablesSummary(),
+    prisma.purchaseInvoice.findMany({
+      skip: paging.skip,
+      take: paging.take,
+      include: {
+        vendor: { select: { name: true } },
+        project: { select: { code: true } },
+      },
+      orderBy: [{ dueDate: "asc" }, { id: "asc" }],
+    }),
+    prisma.purchaseInvoice.count(),
+    prisma.purchaseOrder.findMany({
+      where: { status: "DELIVERED" },
+      select: { id: true, poNumber: true, totalAmount: true },
+      take: 1000,
+    }),
+    prisma.project.findMany({
+      where: { status: { not: "ARCHIVED" } },
+      select: { id: true, code: true, name: true },
+      take: 1000,
+    }),
+    prisma.vendor.findMany({
+      where: { isActive: true },
+      select: { id: true, name: true },
+      take: 1000,
+    }),
+  ]);
   return (
-    <AppLayout title="Keuangan & Akuntansi (Accurate Standard)" subtitle="Buku Besar, Faktur Pembelian (AP), Faktur Penjualan (AR) & Profitabilitas Proyek" user={session.user}>
-      <FinanceClient 
-        user={session.user} 
-        glAccounts={glAccounts} 
-        purchaseInvoices={purchaseInvoices}
+    <AppLayout
+      title="Keuangan & Akuntansi"
+      subtitle="Saldo jurnal, hutang, pembayaran, dan laba proyek"
+      user={session.user}
+    >
+      <FinanceClient
+        glAccounts={glAccounts}
         profitData={profitData}
+        summary={summary[0]}
+        purchaseInvoices={purchaseInvoices}
+        orders={orders}
+        projects={projects}
+        vendors={vendors}
       />
+      <ListPager page={paging.page} total={total} />
     </AppLayout>
   );
 }

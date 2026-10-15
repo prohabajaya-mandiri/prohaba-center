@@ -2,7 +2,7 @@
 
 import Link from 'next/link';
 import { usePathname } from 'next/navigation';
-import { useSession, signOut } from 'next-auth/react';
+import { signOut } from 'next-auth/react';
 import {
   LayoutDashboard, Building2, LineChart, Ruler,
   Wrench, Package, ShoppingCart, ShoppingBag,
@@ -60,15 +60,16 @@ const NAV_ITEMS = [
   {
     section: 'Sistem',
     items: [
+      { href: '/master-data', label: 'Master Data', icon: UserCog, roles: ['TOP_MANAGEMENT','HRD','LOGISTIK','FINANCE'] },
       { href: '/users', label: 'Pengguna', icon: UserCog, roles: ['TOP_MANAGEMENT'] },
       { href: '/audit-log', label: 'Audit Log', icon: History, roles: ['TOP_MANAGEMENT'] },
           ],
   },
 ];
 
-export default function Sidebar({ isOpen, setIsOpen }) {
+export default function Sidebar({ user, isOpen, setIsOpen }) {
   const pathname = usePathname();
-  const { data: session } = useSession();
+  const session = user ? { user } : null;
   const { showConfirm } = useDialog();
   const userRole = session?.user?.role || 'GUEST';
 

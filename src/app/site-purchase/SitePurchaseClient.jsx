@@ -1,287 +1,324 @@
-'use client';
-
-import { useState } from 'react';
-import { useRouter } from 'next/navigation';
-import { ShoppingBag, AlertTriangle, CheckCircle, ShieldAlert, FileText, Search, Plus, Info } from 'lucide-react';
-import { useDialog } from '@/components/DialogProvider';
-
-export default function SitePurchaseClient({ sitePurchases, projects, projectDict, priceReferences, user }) {
-  const router = useRouter();
-  const [activeTab, setActiveTab] = useState('list');
-  const [searchCode, setSearchCode] = useState('');
-  const [refPriceFound, setRefPriceFound] = useState(null);
-  const [isSubmitting, setIsSubmitting] = useState(false);
-  const { showAlert } = useDialog();
-
-  const [formData, setFormData] = useState({
-    projectId: projects.length > 0 ? projects[0].id : '',
-    purchaseDate: new Date().toISOString().split('T')[0],
-    vendor: '',
-    description: '',
-    quantity: '',
-    unit: '',
-    unitPrice: '',
-    notes: ''
-  });
-
-  const formatCurrency = (amount) => {
-    return new Intl.NumberFormat('id-ID', { style: 'currency', currency: 'IDR' }).format(amount);
-  };
-
-  const checkPrice = (code) => {
-    const ref = priceReferences.find(r => r.itemCode === code || r.description.toLowerCase().includes(code.toLowerCase()));
-    setRefPriceFound(ref || null);
-    if (ref) {
-      setFormData(prev => ({ ...prev, description: ref.description, unit: ref.unit }));
-    } else {
-      setFormData(prev => ({ ...prev, description: code, unit: '' }));
-    }
-  };
-
-  const handleSubmit = async (e) => {
+"use client";
+import { useState } from "react";
+import { useRouter } from "next/navigation";
+import { apiFetch, businessToday } from "@/lib/client-api";
+const idr = (v) =>
+  new Intl.NumberFormat("id-ID", { style: "currency", currency: "IDR" }).format(
+    v,
+  );
+export default function SitePurchaseClient({
+  sitePurchases,
+  projects,
+  priceReferences,
+  user,
+  accounts,
+}) {
+  const router = useRouter(),
+    [error, setError] = useState(""),
+    [busy, setBusy] = useState(false),
+    [refId, setRefId] = useState(""),
+    [review, setReview] = useState(null);
+  const ref = priceReferences.find((r) => r.id === refId),
+    canReview = ["FINANCE", "TOP_MANAGEMENT"].includes(user.role);
+  async function submit(e) {
     e.preventDefault();
-    setIsSubmitting(true);
+    setBusy(true);
+    setError("");
     try {
-      const payload = {
-        ...formData,
-        refPrice: refPriceFound ? refPriceFound.refPrice : null,
-        userId: user.id
-      };
-
-      const res = await fetch('/api/site-purchase', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify(payload)
-      });
-
-      if (!res.ok) {
-        const error = await res.json();
-        throw new Error(error.error || 'Gagal menyimpan transaksi');
-      }
-
-      await showAlert('Bukti pembelian berhasil disubmit!', 'Sukses');
-      setFormData({
-        projectId: projects.length > 0 ? projects[0].id : '',
-        purchaseDate: new Date().toISOString().split('T')[0],
-        vendor: '',
-        description: '',
-        quantity: '',
-        unit: '',
-        unitPrice: '',
-        notes: ''
-      });
-      setSearchCode('');
-      setRefPriceFound(null);
-      setActiveTab('list');
+      const form = new FormData(e.currentTarget),
+        body = Object.fromEntries(form),
+        upload = new FormData();
+      delete body.file;
+      if (!body.priceReferenceId) delete body.priceReferenceId;
+      upload.set("payload", JSON.stringify(body));
+      upload.set("file", form.get("file"));
+      await apiFetch("/api/site-purchase", { method: "POST", body: upload });
+      e.target.reset();
+      setRefId("");
       router.refresh();
-    } catch (error) {
-      await showAlert(error.message, 'Error');
+    } catch (e) {
+      setError(e.message);
     } finally {
-      setIsSubmitting(false);
+      setBusy(false);
     }
-  };
-
+  }
+  async function reviewPurchase(e) {
+    e.preventDefault();
+    setBusy(true);
+    setError("");
+    try {
+      await apiFetch("/api/site-purchase/" + review.id, {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(Object.fromEntries(new FormData(e.currentTarget))),
+      });
+      setReview(null);
+      router.refresh();
+    } catch (e) {
+      setError(e.message);
+    } finally {
+      setBusy(false);
+    }
+  }
   return (
-    <>
-      {/* Alert Banner for Top Management / Finance */}
-      {sitePurchases.some(sp => sp.priceFlag && sp.status === 'PENDING') && (
-        <div className="alert alert-danger" style={{ marginBottom: 20 }}>
-          <ShieldAlert size={20} style={{ flexShrink: 0 }} />
-          <div>
-            <strong>Peringatan Anti-Markup!</strong> Terdapat transaksi Site Purchase yang terindikasi Mark-up (&gt;10% dari harga referensi pasar) dan membutuhkan tinjauan segera.
-          </div>
-        </div>
+    <div style={{ display: "grid", gap: 20 }}>
+      {error && (
+        <p role="alert" className="alert alert-danger">
+          {error}
+        </p>
       )}
-
-      <div className="tabs">
-        <button className={`tab ${activeTab === 'list' ? 'active' : ''}`} onClick={() => setActiveTab('list')}>
-          <FileText size={16} className="inline-block mr-2" />
-          Riwayat Pembelian Site
-        </button>
-        {(user.role === 'PJO' || user.role === 'LOGISTIK') && (
-          <button className={`tab ${activeTab === 'create' ? 'active' : ''}`} onClick={() => setActiveTab('create')}>
-            <Plus size={16} className="inline-block mr-2" />
-            Input Bon Baru
-          </button>
-        )}
-      </div>
-
-      {activeTab === 'list' && (
-        <div className="card">
-          <div className="card-body p-0">
-            <table className="table">
-              <thead>
-                <tr>
-                  <th>Tanggal</th>
-                  <th>Proyek</th>
-                  <th>Deskripsi Item</th>
-                  <th>Qty</th>
-                  <th>Harga Satuan</th>
-                  <th>Total</th>
-                  <th>Status Anti-Markup</th>
-                </tr>
-              </thead>
-              <tbody>
-                {sitePurchases.length === 0 ? (
-                  <tr><td colSpan={7} className="text-center py-8 text-gray-500">Belum ada transaksi Site Purchase.</td></tr>
-                ) : (
-                  sitePurchases.map(sp => (
-                    <tr key={sp.id} style={{ background: sp.priceFlag && sp.status === 'PENDING' ? 'var(--red-50)' : 'transparent' }}>
-                      <td style={{ fontSize: 13, color: 'var(--gray-600)' }}>{new Date(sp.purchaseDate).toLocaleDateString('id-ID')}</td>
-                      <td>{projectDict[sp.projectId]}</td>
-                      <td style={{ fontWeight: 500 }}>
-                        {sp.description}
-                        <br />
-                        <span style={{ fontSize: 11, color: 'var(--gray-500)' }}>{sp.vendor}</span>
-                      </td>
-                      <td style={{ fontWeight: 600 }}>{sp.quantity} {sp.unit}</td>
-                      <td>{formatCurrency(sp.unitPrice)}</td>
-                      <td style={{ fontWeight: 700, color: 'var(--navy-700)' }}>{formatCurrency(sp.totalAmount)}</td>
-                      <td>
-                        {sp.priceFlag ? (
-                          <div style={{ display: 'flex', flexDirection: 'column', gap: 4 }}>
-                            <span className="badge badge-danger">
-                              <AlertTriangle size={12} className="mr-1 inline" /> Terindikasi Mark-up +{sp.flagPct}%
-                            </span>
-                            {sp.status === 'PENDING' ? (
-                              <button className="btn btn-sm btn-outline" style={{ fontSize: 11, padding: '2px 8px' }}>Review</button>
-                            ) : (
-                              <span style={{ fontSize: 11, color: 'var(--gray-500)' }}>Di-approve secara manual</span>
-                            )}
-                          </div>
-                        ) : (
-                          <span className="badge badge-success">
-                            <CheckCircle size={12} className="mr-1 inline" /> Wajar
-                          </span>
-                        )}
-                      </td>
-                    </tr>
-                  ))
-                )}
-              </tbody>
-            </table>
-          </div>
-        </div>
+      {["PJO", "LOGISTIK", "TOP_MANAGEMENT"].includes(user.role) && (
+        <details className="card" style={{ padding: 20 }}>
+          <summary>Input bon pembelian</summary>
+          <form
+            onSubmit={submit}
+            style={{ display: "grid", gap: 12, maxWidth: 700, marginTop: 16 }}
+          >
+            <label>
+              Proyek
+              <select name="projectId" className="form-select" required>
+                {projects.map((p) => (
+                  <option key={p.id} value={p.id}>
+                    {p.code} — {p.name}
+                  </option>
+                ))}
+              </select>
+            </label>
+            <label>
+              Tanggal beli
+              <input
+                name="purchaseDate"
+                type="date"
+                className="form-input"
+                defaultValue={businessToday()}
+                required
+              />
+            </label>
+            <label>
+              Toko/pemasok
+              <input
+                name="vendor"
+                className="form-input"
+                required
+                maxLength={200}
+              />
+            </label>
+            <label>
+              Referensi harga
+              <select
+                name="priceReferenceId"
+                className="form-select"
+                value={refId}
+                onChange={(e) => setRefId(e.target.value)}
+              >
+                <option value="">Tanpa referensi — perlu review manual</option>
+                {priceReferences.map((r) => (
+                  <option key={r.id} value={r.id}>
+                    {r.itemCode} — {r.description} ({idr(r.refPrice)}/{r.unit})
+                  </option>
+                ))}
+              </select>
+            </label>
+            <label>
+              Uraian
+              <input
+                key={"description" + refId}
+                name="description"
+                className="form-input"
+                defaultValue={ref?.description ?? ""}
+                required
+                maxLength={500}
+              />
+            </label>
+            <label>
+              Satuan
+              <input
+                key={"unit" + refId}
+                name="unit"
+                className="form-input"
+                defaultValue={ref?.unit ?? ""}
+                readOnly={!!ref}
+                required
+                maxLength={30}
+              />
+            </label>
+            <label>
+              Jumlah
+              <input
+                name="quantity"
+                type="number"
+                min="0.001"
+                step="0.001"
+                className="form-input"
+                required
+              />
+            </label>
+            <label>
+              Harga satuan
+              <input
+                name="unitPrice"
+                type="number"
+                min="0.01"
+                step="0.01"
+                className="form-input"
+                required
+              />
+            </label>
+            <label>
+              Foto/PDF kuitansi (maksimum 4 MB)
+              <input
+                name="file"
+                type="file"
+                accept=".pdf,.png,.jpg,.jpeg"
+                required
+              />
+            </label>
+            <label>
+              Catatan
+              <textarea name="notes" className="form-input" maxLength={2000} />
+            </label>
+            <button className="btn btn-primary" disabled={busy}>
+              Kirim bon & bukti
+            </button>
+          </form>
+        </details>
       )}
-
-      {activeTab === 'create' && (
-        <div className="card">
-          <div className="card-header">
-            <div className="card-title">Form Input Site Purchase</div>
-          </div>
-          <div className="card-body">
-            <div className="alert alert-warning">
-              <Info size={16} style={{ flexShrink: 0 }} />
-              <div>
-                <strong>Perhatian:</strong> Semua input harga akan otomatis divalidasi oleh sistem Anti-Markup berdasarkan database Referensi Harga. Mark-up di atas 10% akan memicu <i>Red Flag</i> ke Top Management.
-              </div>
-            </div>
-
-            <form onSubmit={handleSubmit}>
-              <div className="form-grid">
-                <div className="form-group">
-                  <label className="form-label required">Proyek</label>
-                  <select className="form-input form-select" required
-                    value={formData.projectId} onChange={e => setFormData({...formData, projectId: e.target.value})}>
-                    {projects.map(p => (
-                      <option key={p.id} value={p.id}>{p.code} - {p.name}</option>
-                    ))}
-                  </select>
-                </div>
-                <div className="form-group">
-                  <label className="form-label required">Tanggal Beli</label>
-                  <input type="date" className="form-input" required
-                    value={formData.purchaseDate} onChange={e => setFormData({...formData, purchaseDate: e.target.value})} />
-                </div>
-              </div>
-
-              <div className="form-group" style={{ marginTop: 20 }}>
-                <label className="form-label required">Supplier / Toko</label>
-                <input type="text" className="form-input" required placeholder="Toko Material Maju Bersama..."
-                  value={formData.vendor} onChange={e => setFormData({...formData, vendor: e.target.value})} />
-              </div>
-
-            <hr style={{ margin: '24px 0', borderTop: '1px solid var(--gray-200)' }} />
-
-            <div style={{ display: 'flex', gap: 20, alignItems: 'flex-start' }}>
-              <div style={{ flex: 1 }}>
-                <div className="form-group">
-                  <label className="form-label required">Nama Barang</label>
-                  <div style={{ display: 'flex', gap: 8 }}>
-                    <input 
-                      type="text" 
-                      className="form-input" 
-                      placeholder="Ketik kode atau nama barang (cth: Semen, Besi)..." 
-                      value={searchCode}
-                      onChange={e => setSearchCode(e.target.value)}
-                    />
-                    <button className="btn btn-outline" onClick={() => checkPrice(searchCode)}>
-                      <Search size={16} />
+      <section className="card" style={{ padding: 20 }}>
+        <table className="table">
+          <thead>
+            <tr>
+              <th>Tanggal / Proyek</th>
+              <th>Barang</th>
+              <th>Jumlah</th>
+              <th>Total</th>
+              <th>Harga / Status</th>
+              <th>Bukti / Review</th>
+            </tr>
+          </thead>
+          <tbody>
+            {sitePurchases.map((sp) => (
+              <tr key={sp.id}>
+                <td>
+                  {new Date(sp.purchaseDate).toISOString().slice(0, 10)}
+                  <br />
+                  {sp.project.code}
+                </td>
+                <td>
+                  {sp.description}
+                  <br />
+                  {sp.vendor}
+                </td>
+                <td>
+                  {sp.quantity} {sp.unit}
+                </td>
+                <td>{idr(sp.totalAmount)}</td>
+                <td>
+                  {sp.priceFlag
+                    ? sp.flagPct === null
+                      ? "Tanpa referensi"
+                      : "Selisih " + sp.flagPct.toFixed(1) + "%"
+                    : "Dalam batas referensi"}
+                  <br />
+                  {sp.status}
+                </td>
+                <td>
+                  {sp.receiptUrl ? (
+                    <a href={sp.receiptUrl}>Unduh bukti</a>
+                  ) : (
+                    <span>Belum ada bukti</span>
+                  )}
+                  {!sp.receiptUrl &&
+                    sp.status === "PENDING" &&
+                    (sp.requestedBy === user.id ||
+                      user.role === "TOP_MANAGEMENT") && (
+                      <form
+                        onSubmit={async (e) => {
+                          e.preventDefault();
+                          try {
+                            await apiFetch(
+                              "/api/site-purchase/" + sp.id + "/receipt",
+                              {
+                                method: "POST",
+                                body: new FormData(e.currentTarget),
+                              },
+                            );
+                            router.refresh();
+                          } catch (err) {
+                            setError(err.message);
+                          }
+                        }}
+                      >
+                        <input
+                          name="file"
+                          type="file"
+                          accept=".pdf,.png,.jpg,.jpeg"
+                          required
+                        />
+                        <button className="btn btn-outline">Lampirkan</button>
+                      </form>
+                    )}
+                  {canReview && sp.status === "PENDING" && (
+                    <button
+                      className="btn btn-outline"
+                      onClick={() => setReview(sp)}
+                    >
+                      Review
                     </button>
-                  </div>
-                </div>
-
-                {refPriceFound && (
-                  <div style={{ padding: '12px', background: 'var(--green-50)', border: '1px solid var(--green-200)', borderRadius: 'var(--radius-md)', marginBottom: 20, display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-                    <div>
-                      <div style={{ fontSize: 11, fontWeight: 700, color: 'var(--green-800)', textTransform: 'uppercase' }}>Harga Referensi Ditemukan</div>
-                      <div style={{ fontWeight: 500, color: 'var(--green-900)' }}>{refPriceFound.description}</div>
-                    </div>
-                    <div style={{ textAlign: 'right' }}>
-                      <div style={{ fontSize: 16, fontWeight: 700, color: 'var(--green-700)' }}>{formatCurrency(refPriceFound.refPrice)}</div>
-                      <div style={{ fontSize: 11, color: 'var(--green-600)' }}>per {refPriceFound.unit}</div>
-                    </div>
-                  </div>
-                )}
-                {!refPriceFound && searchCode && (
-                  <div style={{ padding: '12px', background: 'var(--gray-50)', border: '1px solid var(--gray-200)', borderRadius: 'var(--radius-md)', marginBottom: 20, fontSize: 12, color: 'var(--gray-600)' }}>
-                    Item tidak ditemukan di database referensi pusat. Validasi harga akan masuk dalam review manual (Pending).
-                  </div>
-                )}
-
-                  <div className="form-grid" style={{ gridTemplateColumns: '1fr 1fr 1fr' }}>
-                    <div className="form-group">
-                      <label className="form-label required">Kuantitas</label>
-                      <input type="number" className="form-input" required placeholder="0" step="0.01"
-                        value={formData.quantity} onChange={e => setFormData({...formData, quantity: e.target.value})} />
-                    </div>
-                    <div className="form-group">
-                      <label className="form-label required">Satuan</label>
-                      <input type="text" className="form-input" required placeholder="Sak / Btg"
-                        value={formData.unit} onChange={e => setFormData({...formData, unit: e.target.value})} />
-                    </div>
-                    <div className="form-group">
-                      <label className="form-label required">Harga Satuan</label>
-                      <input type="number" className="form-input" required placeholder="Rp..."
-                        value={formData.unitPrice} onChange={e => setFormData({...formData, unitPrice: e.target.value})} />
-                    </div>
-                  </div>
-              </div>
-              
-              <div style={{ width: 300, background: 'var(--gray-50)', border: '1px dashed var(--gray-300)', borderRadius: 'var(--radius-md)', padding: 20, textAlign: 'center' }}>
-                <div style={{ marginBottom: 12, color: 'var(--gray-500)' }}>Unggah Bukti</div>
-                <ShoppingBag size={32} style={{ margin: '0 auto 12px', color: 'var(--gray-400)' }} />
-                <button className="btn btn-sm btn-outline" style={{ width: '100%' }}>Pilih Foto</button>
-              </div>
-            </div>
-
-              <div className="form-group" style={{ marginTop: 20 }}>
-                <label className="form-label">Keterangan</label>
-                <textarea className="form-input" rows="2" placeholder="Jelaskan mengapa barang tidak di-request melalui pusat..."
-                  value={formData.notes} onChange={e => setFormData({...formData, notes: e.target.value})}></textarea>
-              </div>
-
-              <div style={{ display: 'flex', justifyContent: 'flex-end', gap: 10, marginTop: 24 }}>
-                <button type="button" className="btn btn-outline" onClick={() => setActiveTab('list')}>Batal</button>
-                <button type="submit" className="btn btn-primary" disabled={isSubmitting}>
-                  <CheckCircle size={16} className="inline-block mr-2" />
-                  {isSubmitting ? 'Submitting...' : 'Submit Bukti Pembelian'}
-                </button>
-              </div>
-            </form>
+                  )}
+                </td>
+              </tr>
+            ))}
+          </tbody>
+        </table>
+      </section>
+      {review && (
+        <form
+          onSubmit={reviewPurchase}
+          className="card"
+          style={{ padding: 20, display: "grid", gap: 12 }}
+        >
+          <h2>Review: {review.description}</h2>
+          <p>
+            {idr(review.totalAmount)} · Persetujuan mencatat bon ini sebagai
+            pengeluaran kas yang sudah terjadi.
+          </p>
+          <select name="status" className="form-select">
+            <option value="APPROVED">Setujui & catat pengeluaran</option>
+            <option value="REJECTED">Tolak</option>
+          </select>
+          <label>
+            Kas/bank
+            <select name="bankAccountId" className="form-select">
+              <option value="">Pilih kas/bank untuk persetujuan</option>
+              {accounts.map((a) => (
+                <option key={a.id} value={a.id}>
+                  {a.accountNo} — {a.name}
+                </option>
+              ))}
+            </select>
+          </label>
+          <label>
+            Alasan/catatan review
+            <textarea
+              name="reviewNotes"
+              className="form-input"
+              maxLength={2000}
+            />
+          </label>
+          <div>
+            <button className="btn btn-primary" disabled={busy}>
+              Simpan review
+            </button>{" "}
+            <button
+              type="button"
+              className="btn btn-outline"
+              onClick={() => setReview(null)}
+            >
+              Batal
+            </button>
           </div>
-        </div>
+        </form>
       )}
-    </>
+    </div>
   );
 }

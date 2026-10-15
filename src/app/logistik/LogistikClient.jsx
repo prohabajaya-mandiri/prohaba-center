@@ -1,4 +1,5 @@
 'use client';
+import { apiFetch } from '@/lib/client-api';
 
 import { useState } from 'react';
 import { useRouter } from 'next/navigation';
@@ -49,7 +50,7 @@ export default function LogistikClient({ user, vehicles, fuelLogs, maintenanceLo
     }
     setIsSubmitting(true);
     try {
-      const res = await fetch('/api/logistik/vehicle', {
+      const res = await apiFetch('/api/logistik/vehicle', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ code: vCode, name: vName, type: vType, plateNumber: vPlate, status: 'ACTIVE' })
@@ -77,7 +78,7 @@ export default function LogistikClient({ user, vehicles, fuelLogs, maintenanceLo
     
     setIsSubmitting(true);
     try {
-      const res = await fetch('/api/logistik/maintenance', {
+      const res = await apiFetch('/api/logistik/maintenance', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
@@ -90,7 +91,7 @@ export default function LogistikClient({ user, vehicles, fuelLogs, maintenanceLo
           mechanic: mMechanic,
           partName: mPartName || null,
           nextServiceMeter: mNextMeter ? parseFloat(mNextMeter) : null,
-          nextServiceDate: mNextDate ? new Date(mNextDate).toISOString() : null
+          nextServiceDate: mNextDate ? mNextDate : null
         })
       });
 
@@ -126,7 +127,7 @@ export default function LogistikClient({ user, vehicles, fuelLogs, maintenanceLo
     
     setIsSubmitting(true);
     try {
-      const res = await fetch('/api/logistik/fuel', {
+      const res = await apiFetch('/api/logistik/fuel', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({

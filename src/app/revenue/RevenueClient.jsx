@@ -1,5 +1,8 @@
 'use client';
+import { businessToday } from '@/lib/client-api';
+import { apiFetch } from '@/lib/client-api';
 
+import PaymentDialog from '@/components/PaymentDialog';
 import React, { useState, useMemo } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
 import { 
@@ -7,7 +10,8 @@ import {
 } from 'lucide-react';
 import { useDialog } from '@/components/DialogProvider';
 
-export default function RevenueClient({ invoices, projects }) {
+export default function RevenueClient({ invoices, projects, accounts, downPayments }) {
+  const [payment, setPayment] = useState(null);
   const [search, setSearch] = useState('');
   const [filterProject, setFilterProject] = useState('ALL');
   const [isModalOpen, setIsModalOpen] = useState(false);
@@ -21,7 +25,7 @@ export default function RevenueClient({ invoices, projects }) {
     description: '',
     subTotal: '',
     taxRate: '11',
-    date: new Date().toISOString().split('T')[0],
+    date: businessToday(),
     dueDate: '',
     category: 'TERMIN',
     downPaymentId: ''
@@ -38,8 +42,8 @@ export default function RevenueClient({ invoices, projects }) {
 
   const downPaymentOptions = useMemo(() => {
     if (!formData.projectId) return [];
-    return invoices.filter(inv => inv.projectId === formData.projectId && inv.category === 'DP' && inv.status === 'UNPAID');
-  }, [invoices, formData.projectId]);
+    return downPayments.filter(inv => inv.projectId === formData.projectId);
+  }, [downPayments, formData.projectId]);
 
   const formatRupiah = (amount) => {
     return new Intl.NumberFormat('id-ID', { style: 'currency', currency: 'IDR', minimumFractionDigits: 0 }).format(amount || 0);
@@ -58,7 +62,7 @@ export default function RevenueClient({ invoices, projects }) {
       description: '',
       subTotal: '',
       taxRate: '11',
-      date: new Date().toISOString().split('T')[0],
+      date: businessToday(),
       dueDate: '',
       category: 'TERMIN',
       downPaymentId: ''
@@ -70,43 +74,32 @@ export default function RevenueClient({ invoices, projects }) {
     e.preventDefault();
     setSubmitting(true);
     try {
-      const res = await fetch('/api/revenue', {
+      const res = await apiFetch('/api/revenue', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify(formData)
+        body: JSON.stringify({...formData,downPaymentAmount:formData.downPaymentAmount||undefined})
       });
       if (!res.ok) throw new Error('Gagal menyimpan tagihan');
       
       setIsModalOpen(false);
       window.location.reload();
     } catch (err) {
-      console.error(err);
-      await showAlert('Gagal membuat tagihan. Pastikan data terisi dengan benar.', 'Error');
+      await showAlert(err.message, 'Gagal');
+      await showAlert(err.message, 'Error');
     } finally {
       setSubmitting(false);
     }
   };
 
   const handleUpdateStatus = async (id, status) => {
-    const confirmed = await showConfirm(`Tandai tagihan sebagai ${status}?`);
-    if (!confirmed) return;
-    try {
-      await fetch(`/api/revenue/${id}`, {
-        method: 'PATCH',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ status })
-      });
-      window.location.reload();
-    } catch (err) {
-      console.error(err);
-    }
+    setPayment(invoices.find(i=>i.id===id));
   };
 
   const handleDelete = async (id) => {
-    const confirmed = await showConfirm('Hapus tagihan ini secara permanen beserta jurnalnya?', 'Hapus Permanen');
+    const confirmed = await showConfirm('Batalkan faktur ini dan buat jurnal pembalik? Riwayat tetap disimpan.', 'Batalkan Faktur');
     if (!confirmed) return;
     try {
-      await fetch(`/api/revenue/${id}`, { method: 'DELETE' });
+      await apiFetch(`/api/revenue/${id}`, { method: 'DELETE' });
       window.location.reload();
     } catch (err) {
       console.error(err);
@@ -114,6 +107,7 @@ export default function RevenueClient({ invoices, projects }) {
   };
 
   const getStatusBadge = (status) => {
+    if (status === 'VOID') return <span className="badge">DIBATALKAN</span>;
     if (status === 'PAID') return <span className="badge badge-success" style={{ fontSize: '11px', padding: '4px 8px', borderRadius: '6px', fontWeight: 600 }}>LUNAS</span>;
     if (status === 'PARTIAL') return <span className="badge badge-warning" style={{ fontSize: '11px', padding: '4px 8px', borderRadius: '6px', fontWeight: 600 }}>SEBAGIAN</span>;
     return <span className="badge badge-danger" style={{ fontSize: '11px', padding: '4px 8px', borderRadius: '6px', fontWeight: 600 }}>BELUM BAYAR</span>;
@@ -125,6 +119,7 @@ export default function RevenueClient({ invoices, projects }) {
       initial={{ opacity: 0, y: 10 }}
       animate={{ opacity: 1, y: 0 }}
     >
+      {payment&&<PaymentDialog endpoint={'/api/revenue/'+payment.id+'/payments'} amount={payment.totalAmount-payment.paidAmount} accounts={accounts} onClose={()=>setPayment(null)} onSuccess={()=>window.location.reload()}/>}
       {/* Top Actions */}
       <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: '16px' }}>
         <div style={{ display: 'flex', gap: '16px', flex: 1, maxWidth: '600px' }}>
@@ -242,12 +237,12 @@ export default function RevenueClient({ invoices, projects }) {
                       >
                         <Printer size={18} />
                       </button>
-                      {inv.status === 'UNPAID' && (
+                      {['UNPAID','PARTIAL'].includes(inv.status) && (
                         <button 
                           className="btn-ghost" 
                           style={{ padding: '8px', borderRadius: '8px', color: 'var(--green-600)' }}
                           onClick={() => handleUpdateStatus(inv.id, 'PAID')}
-                          title="Lunas"
+                          title="Catat penerimaan"
                         >
                           <Check size={18} />
                         </button>
@@ -256,7 +251,7 @@ export default function RevenueClient({ invoices, projects }) {
                         className="btn-ghost" 
                         style={{ padding: '8px', borderRadius: '8px', color: 'var(--red-600)' }}
                         onClick={() => handleDelete(inv.id)}
-                        title="Hapus"
+                        disabled={inv.status==='VOID'||inv.paidAmount>0||inv.dpUsedAmount>0} title="Batalkan faktur"
                       >
                         <AlertCircle size={18} />
                       </button>
@@ -341,9 +336,10 @@ export default function RevenueClient({ invoices, projects }) {
                       >
                         <option value="">Tidak Ada</option>
                         {downPaymentOptions.map(dp => (
-                          <option key={dp.id} value={dp.id}>{dp.invoiceNo} - {formatRupiah(dp.subTotal)}</option>
+                          <option key={dp.id} value={dp.id}>{dp.invoiceNo} - {formatRupiah(dp.subTotal-dp.dpUsedAmount)}</option>
                         ))}
                       </select>
+                      {formData.downPaymentId&&<label>Nominal potongan DP<input type="number" className="form-input" min="0.01" step="0.01" placeholder="Kosong = seluruh saldo tersedia" value={formData.downPaymentAmount??''} onChange={e=>setFormData({...formData,downPaymentAmount:e.target.value})}/></label>}
                     </div>
                   )}
                 </div>

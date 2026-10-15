@@ -1,4 +1,5 @@
 'use client'
+import { apiFetch } from '@/lib/client-api';
 
 import React, { useState, useRef } from 'react'
 import { motion, AnimatePresence } from 'framer-motion'
@@ -8,7 +9,7 @@ import {
 } from 'lucide-react'
 import { useDialog } from '@/components/DialogProvider'
 
-export default function DocumentsClient({ initialDocuments, projects }) {
+export default function DocumentsClient({ initialDocuments, projects, user }) {
   const [documents, setDocuments] = useState(initialDocuments)
   const [search, setSearch] = useState('')
   const [isModalOpen, setIsModalOpen] = useState(false)
@@ -88,7 +89,7 @@ export default function DocumentsClient({ initialDocuments, projects }) {
       data.append('targets', JSON.stringify(formData.targets))
       data.append('file', selectedFile)
 
-      const res = await fetch('/api/documents', {
+      const res = await apiFetch('/api/documents', {
         method: 'POST',
         body: data // Don't set Content-Type header, let browser set it with boundary
       })
@@ -110,7 +111,7 @@ export default function DocumentsClient({ initialDocuments, projects }) {
     if (!confirmed) return
     
     try {
-      const res = await fetch(`/api/documents/${id}`, { method: 'DELETE' })
+      const res = await apiFetch(`/api/documents/${id}`, { method: 'DELETE' })
       if (!res.ok) {
         const result = await res.json()
         throw new Error(result.error || 'Gagal menghapus')
@@ -161,7 +162,7 @@ export default function DocumentsClient({ initialDocuments, projects }) {
         <button 
           className="btn btn-primary" 
           style={{ height: '44px', borderRadius: '12px', display: 'flex', alignItems: 'center', gap: '8px' }}
-          onClick={handleOpenModal}
+          disabled={user.role==='WORKSHOP'} onClick={handleOpenModal}
         >
           <UploadCloud size={18} /> 
           <span>Unggah Dokumen</span>
@@ -257,7 +258,7 @@ export default function DocumentsClient({ initialDocuments, projects }) {
                         <button 
                           className="btn-ghost" 
                           style={{ padding: '8px', borderRadius: '8px', color: 'var(--red-600)' }}
-                          onClick={() => handleDelete(d.id)}
+                          disabled={user.role==='WORKSHOP'} onClick={() => handleDelete(d.id)}
                           title="Hapus Dokumen"
                         >
                           <Trash2 size={18} />

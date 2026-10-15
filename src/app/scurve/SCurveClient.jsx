@@ -1,4 +1,5 @@
 'use client';
+import { apiFetch } from '@/lib/client-api';
 
 import { useState, useEffect, useCallback, useRef } from 'react';
 import { useDialog } from '@/components/DialogProvider';
@@ -62,7 +63,8 @@ const CustomTooltip = ({ active, payload, label }) => {
 };
 
 // ─── Main Component ─────────────────────────────────────────────
-export default function SCurveClient({ projects }) {
+export default function SCurveClient({ projects, user }) {
+  const readOnly = user?.role === 'FINANCE';
   const [selectedProjectId, setSelectedProjectId] = useState(projects?.[0]?.id || '');
   const [activeTab, setActiveTab] = useState('scurve');
   const [data, setData] = useState(null);
@@ -80,7 +82,7 @@ export default function SCurveClient({ projects }) {
   const [editingItem, setEditingItem] = useState(null);
   const [isAddingItem, setIsAddingItem] = useState(false);
   const [newItem, setNewItem] = useState({ code: "", description: "", totalPrice: "" });
-  const { showConfirm, showAlert } = typeof useDialog === 'function' ? useDialog() : { showConfirm: async()=>true, showAlert: async()=>{} };
+  const { showConfirm, showAlert } = useDialog();
 
   const fileInputRef = useRef();
 
@@ -90,13 +92,13 @@ export default function SCurveClient({ projects }) {
     if (!selectedProjectId) return;
     setLoading(true);
     try {
-      const res = await fetch(`/api/scurve?projectId=${selectedProjectId}`);
+      const res = await apiFetch(`/api/scurve?projectId=${selectedProjectId}`);
       const json = await res.json();
       setData(json);
       // Init schedule edits from existing data
       const edits = {};
       json.boqItems?.forEach(item => {
-        edits[item.id] = { startMonth: item.startMonth || '', endMonth: item.endMonth || '' };
+        if (item.isLeaf) edits[item.id] = { startMonth: item.startMonth || '', endMonth: item.endMonth || '' };
       });
       setScheduleEdits(edits);
     } catch (e) {
@@ -106,7 +108,7 @@ export default function SCurveClient({ projects }) {
     }
   }, [selectedProjectId]);
 
-  useEffect(() => { loadData(); }, [loadData]);
+  useEffect(() => { const timer=setTimeout(loadData,0); return ()=>clearTimeout(timer); }, [loadData]);
 
   
   // ─── Edit / Delete BOQ Item ────────────────────────────────────
@@ -114,7 +116,7 @@ export default function SCurveClient({ projects }) {
     const ok = await showConfirm(`Yakin hapus ${item.code} - ${item.description}?`, 'Hapus Item');
     if (!ok) return;
     try {
-      const res = await fetch(`/api/boq/item/${item.id}`, { method: 'DELETE' });
+      const res = await apiFetch(`/api/boq/item/${item.id}`, { method: 'DELETE' });
       if (!res.ok) throw new Error('Gagal dari server');
       await showAlert('Item berhasil dihapus', 'Sukses');
       setUploadMsg(null);
@@ -128,7 +130,7 @@ export default function SCurveClient({ projects }) {
   const saveNewItem = async (e) => {
     e.preventDefault();
     try {
-      const res = await fetch('/api/boq/item', {
+      const res = await apiFetch('/api/boq/item', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
@@ -154,7 +156,7 @@ export default function SCurveClient({ projects }) {
   const saveItemEdit = async (e) => {
     e.preventDefault();
     try {
-      const res = await fetch(`/api/boq/item/${editingItem.id}`, {
+      const res = await apiFetch(`/api/boq/item/${editingItem.id}`, {
         method: 'PUT',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
@@ -186,7 +188,7 @@ export default function SCurveClient({ projects }) {
       const fd = new FormData();
       fd.append('projectId', selectedProjectId);
       fd.append('file', file);
-      const res = await fetch('/api/boq/upload', { method: 'POST', body: fd });
+      const res = await apiFetch('/api/boq/upload', { method: 'POST', body: fd });
       const json = await res.json();
       if (json.success) {
         setUploadMsg({ type: 'success', text: `${json.count} item BOQ berhasil diimpor` });
@@ -208,9 +210,8 @@ export default function SCurveClient({ projects }) {
     setSavingSchedule(true);
     try {
       const updates = Object.entries(scheduleEdits)
-        .filter(([, v]) => v.startMonth || v.endMonth)
         .map(([id, v]) => ({ id, startMonth: v.startMonth || null, endMonth: v.endMonth || null }));
-      const res = await fetch('/api/boq/schedule', {
+      const res = await apiFetch('/api/boq/schedule', {
         method: 'PUT',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ updates }),
@@ -275,7 +276,7 @@ export default function SCurveClient({ projects }) {
             { label: 'Nilai Kontrak', value: fmtIDR(selectedProject.contractValue), color: 'navy', sub: selectedProject.client },
             { label: 'Item BOQ', value: hasBoq ? `${data.boqItems.length} item` : 'Belum upload', color: 'orange', sub: hasBoq ? `${data.summary?.totalWeight}% total bobot` : 'Upload file .xlsx' },
             { label: 'Terjadwal', value: hasBoq ? `${scheduledPct}%` : '-', color: 'green', sub: hasBoq ? `${data.boqItems.filter(i=>i.startMonth&&i.endMonth).length} dari ${data.boqItems.length} item` : '-' },
-            { label: 'Progress Plan', value: data?.scurveData?.length ? `${data.scurveData[data.scurveData.length-1]?.planned?.toFixed(1)}%` : '-', color: 'blue', sub: 'Kumulatif s.d. bulan ini' },
+            { label: 'Progress Plan', value: data?.scurveData?.length ? `${data.scurveData[data.scurveData.length-1]?.planned?.toFixed(1)}%` : '-', color: 'blue', sub: 'Hingga akhir jadwal' },
           ].map((kpi, i) => (
             <div key={i} className={`kpi-card ${kpi.color}`}>
               <div className="kpi-label">{kpi.label}</div>
@@ -328,7 +329,7 @@ export default function SCurveClient({ projects }) {
                 <div style={{ textAlign:'center', padding:60 }}>
                   <FileSpreadsheet size={48} style={{ color:'var(--gray-300)', margin:'0 auto 16px' }} />
                   <div style={{ fontWeight:600, color:'var(--gray-600)', marginBottom:8 }}>Belum ada data BOQ</div>
-                  <div style={{ color:'var(--gray-400)', fontSize:13, marginBottom:20 }}>Upload file BOQ.xlsx terlebih dahulu di tab "Upload BOQ"</div>
+                  <div style={{ color:'var(--gray-400)', fontSize:13, marginBottom:20 }}>Upload file BOQ.xlsx terlebih dahulu di tab &quot;Upload BOQ&quot;</div>
                   <button className="btn btn-primary" onClick={() => setActiveTab('boq')}>
                     <Upload size={14} style={{ marginRight:6 }} /> Upload BOQ
                   </button>
@@ -337,7 +338,7 @@ export default function SCurveClient({ projects }) {
                 <div style={{ textAlign:'center', padding:60 }}>
                   <Calendar size={48} style={{ color:'var(--gray-300)', margin:'0 auto 16px' }} />
                   <div style={{ fontWeight:600, color:'var(--gray-600)', marginBottom:8 }}>Jadwal belum diisi</div>
-                  <div style={{ color:'var(--gray-400)', fontSize:13, marginBottom:20 }}>Isi bulan mulai & selesai per item di tab "Jadwal Item" untuk generate kurva-S</div>
+                  <div style={{ color:'var(--gray-400)', fontSize:13, marginBottom:20 }}>Isi bulan mulai & selesai per item di tab &quot;Jadwal Item&quot; untuk generate kurva-S</div>
                   <button className="btn btn-primary" onClick={() => setActiveTab('schedule')}>
                     <Calendar size={14} style={{ marginRight:6 }} /> Atur Jadwal
                   </button>
@@ -397,7 +398,7 @@ export default function SCurveClient({ projects }) {
                 </div>
 
                 <div
-                  onClick={() => fileInputRef.current?.click()}
+                  disabled={readOnly} onClick={() => fileInputRef.current?.click()}
                   style={{
                     border:'2px dashed var(--gray-300)', borderRadius:'var(--radius-lg)',
                     padding:'40px 32px', textAlign:'center', cursor:'pointer',
@@ -456,11 +457,11 @@ export default function SCurveClient({ projects }) {
                   <div style={{ padding:'14px 20px', borderBottom:'1px solid var(--gray-100)', display:'flex', alignItems:'center', justifyContent:'space-between', flexWrap:'wrap', gap:12 }}>
                     <div style={{ fontSize:13, color:'var(--gray-600)' }}>Atur bulan mulai & selesai per item.</div>
                     <div style={{ display:'flex', gap:12, alignItems:'center' }}>
-                      <button className="btn btn-outline" onClick={() => setIsAddingItem(true)} style={{ height:36 }}>
+                      <button className="btn btn-outline" disabled={readOnly} onClick={() => setIsAddingItem(true)} style={{ height:36 }}>
                         <Plus size={14} style={{ marginRight:6 }} />
                         Tambah Item
                       </button>
-                      <button className="btn btn-primary" onClick={saveSchedule} disabled={savingSchedule} style={{ height:36 }}>
+                      <button className="btn btn-primary" onClick={saveSchedule} disabled={readOnly || savingSchedule} style={{ height:36 }}>
                       {savingSchedule ? <Loader2 size={14} style={{ animation:'spin 1s linear infinite', marginRight:6 }} /> : <Save size={14} style={{ marginRight:6 }} />}
                       Simpan Jadwal
                     </button>
@@ -495,7 +496,7 @@ export default function SCurveClient({ projects }) {
                             </td>
                             <td style={{ padding:'6px 8px' }}>
                               {item.level >= 2 && (
-                                <input type="month" className="form-input" style={{ fontSize:12, height:30, padding:'0 8px', width:140 }}
+                                <input disabled={readOnly} type="month" className="form-input" style={{ fontSize:12, height:30, padding:'0 8px', width:140 }}
                                   value={scheduleEdits[item.id]?.startMonth || ''}
                                   onChange={e => setScheduleEdits(prev => ({ ...prev, [item.id]: { ...prev[item.id], startMonth: e.target.value } }))}
                                 />
@@ -503,7 +504,7 @@ export default function SCurveClient({ projects }) {
                             </td>
                             <td style={{ padding:'6px 8px' }}>
                               {item.level >= 2 && (
-                                <input type="month" className="form-input" style={{ fontSize:12, height:30, padding:'0 8px', width:140 }}
+                                <input disabled={readOnly} type="month" className="form-input" style={{ fontSize:12, height:30, padding:'0 8px', width:140 }}
                                   value={scheduleEdits[item.id]?.endMonth || ''}
                                   onChange={e => setScheduleEdits(prev => ({ ...prev, [item.id]: { ...prev[item.id], endMonth: e.target.value } }))}
                                 />
@@ -511,10 +512,10 @@ export default function SCurveClient({ projects }) {
                             </td>
                             <td style={{ padding:'6px 8px', textAlign:'center' }}>
                               <div style={{ display: 'flex', gap: 4, justifyContent: 'center' }}>
-                                <button onClick={() => setEditingItem(item)} className="btn btn-sm btn-outline" style={{ padding: 4, height: 26, width: 26, display:'flex', alignItems:'center', justifyContent:'center' }} title="Edit Item">
+                                <button disabled={readOnly} onClick={() => setEditingItem(item)} className="btn btn-sm btn-outline" style={{ padding: 4, height: 26, width: 26, display:'flex', alignItems:'center', justifyContent:'center' }} title="Edit Item">
                                   <Edit size={12} />
                                 </button>
-                                <button onClick={() => handleDeleteBoqItem(item)} className="btn btn-sm btn-outline" style={{ padding: 4, height: 26, width: 26, color: 'var(--red-500)', borderColor: 'var(--red-200)', display:'flex', alignItems:'center', justifyContent:'center' }} title="Hapus Item">
+                                <button disabled={readOnly} onClick={() => handleDeleteBoqItem(item)} className="btn btn-sm btn-outline" style={{ padding: 4, height: 26, width: 26, color: 'var(--red-500)', borderColor: 'var(--red-200)', display:'flex', alignItems:'center', justifyContent:'center' }} title="Hapus Item">
                                   <Trash2 size={12} />
                                 </button>
                               </div>
@@ -538,7 +539,7 @@ export default function SCurveClient({ projects }) {
                 <>
                   <div style={{ padding:'14px 20px', borderBottom:'1px solid var(--gray-100)', display:'flex', alignItems:'center', gap:12, flexWrap:'wrap' }}>
                     <label style={{ fontSize:13, fontWeight:600, color:'var(--gray-700)' }}>Bulan Realisasi:</label>
-                    <input type="month" className="form-input" value={selectedMonth} onChange={e => setSelectedMonth(e.target.value)} style={{ width:160, height:36, fontSize:13 }} />
+                    <input disabled={readOnly} type="month" className="form-input" value={selectedMonth} onChange={e => setSelectedMonth(e.target.value)} style={{ width:160, height:36, fontSize:13 }} />
                     <span style={{ fontSize:12, color:'var(--gray-400)' }}>Input % kemajuan per item untuk bulan ini</span>
                   </div>
                   <div style={{ overflowX:'auto' }}>
@@ -554,9 +555,10 @@ export default function SCurveClient({ projects }) {
                         </tr>
                       </thead>
                       <tbody>
-                        {data.boqItems.filter(i => i.level >= 2).map((item) => {
+                        {data.boqItems.filter(i => i.isLeaf).map((item) => {
                           const existing = item.actuals?.find(a => a.month === selectedMonth);
-                          const edit = actualEdits[item.id] || { progressPct: existing?.progressPct ?? '', costActual: existing?.costActual ?? '', notes: existing?.notes ?? '' };
+                          const editKey = selectedProjectId + ":" + selectedMonth + ":" + item.id;
+                          const edit = actualEdits[editKey] || { progressPct: existing?.progressPct ?? '', costActual: existing?.costActual ?? '', notes: existing?.notes ?? '' };
                           return (
                             <tr key={item.id} style={{ borderBottom:'1px solid var(--gray-100)' }}>
                               <td style={{ padding:'8px 16px', paddingLeft: 16 + levelIndent[item.level] }}>
@@ -568,38 +570,39 @@ export default function SCurveClient({ projects }) {
                               </td>
                               <td style={{ padding:'6px 8px', textAlign:'center' }}>
                                 <div style={{ display:'flex', alignItems:'center', gap:4, justifyContent:'center' }}>
-                                  <input type="number" min="0" max="100" step="0.5" className="form-input" placeholder="0"
+                                  <input disabled={readOnly} type="number" min="0" max="100" step="0.5" className="form-input" placeholder="0"
                                     style={{ width:70, height:30, textAlign:'center', fontSize:12 }}
                                     value={edit.progressPct}
-                                    onChange={e => setActualEdits(prev => ({ ...prev, [item.id]: { ...edit, progressPct: e.target.value } }))}
+                                    onChange={e => setActualEdits(prev => ({ ...prev, [editKey]: { ...edit, progressPct: e.target.value } }))}
                                   />
                                   <span style={{ fontSize:11, color:'var(--gray-400)' }}>%</span>
                                 </div>
                               </td>
                               <td style={{ padding:'6px 8px' }}>
-                                <input type="number" min="0" className="form-input" placeholder="0"
+                                <input disabled={readOnly} type="number" min="0" className="form-input" placeholder="0"
                                   style={{ width:120, height:30, fontSize:12 }}
                                   value={edit.costActual}
-                                  onChange={e => setActualEdits(prev => ({ ...prev, [item.id]: { ...edit, costActual: e.target.value } }))}
+                                  onChange={e => setActualEdits(prev => ({ ...prev, [editKey]: { ...edit, costActual: e.target.value } }))}
                                 />
                               </td>
                               <td style={{ padding:'6px 8px' }}>
-                                <input type="text" className="form-input" placeholder="Keterangan..."
+                                <input disabled={readOnly} type="text" className="form-input" placeholder="Keterangan..."
                                   style={{ width:160, height:30, fontSize:12 }}
                                   value={edit.notes}
-                                  onChange={e => setActualEdits(prev => ({ ...prev, [item.id]: { ...edit, notes: e.target.value } }))}
+                                  onChange={e => setActualEdits(prev => ({ ...prev, [editKey]: { ...edit, notes: e.target.value } }))}
                                 />
                               </td>
                               <td style={{ padding:'6px 8px', textAlign:'center' }}>
                                 <button className="btn btn-sm btn-primary" style={{ height:28, fontSize:11 }}
-                                  onClick={async () => {
-                                    await fetch('/api/boq/actual', {
+                                  disabled={readOnly} onClick={async () => {
+                                    try { await apiFetch('/api/boq/actual', {
                                       method:'POST',
                                       headers:{'Content-Type':'application/json'},
                                       body: JSON.stringify({ boqItemId: item.id, projectId: selectedProjectId, month: selectedMonth, progressPct: parseFloat(edit.progressPct)||0, costActual: parseFloat(edit.costActual)||0, notes: edit.notes })
                                     });
                                     setUploadMsg({ type:'success', text:`Realisasi ${item.code} bulan ${fmtMonth(selectedMonth)} tersimpan` });
                                     await loadData();
+                                    } catch (error) { await showAlert(error.message, 'Gagal menyimpan realisasi'); }
                                   }}
                                 >
                                   Simpan
