@@ -1,6 +1,8 @@
 export const ROLES = ['TOP_MANAGEMENT', 'HRD', 'PJO', 'LOGISTIK', 'FINANCE', 'ENGINEERING', 'WORKSHOP'];
 const moduleRoles = {
   dashboard: ROLES, projects: ROLES,
+  master: ['TOP_MANAGEMENT','HRD','LOGISTIK','FINANCE'],
+  'master-data': ['TOP_MANAGEMENT','HRD','LOGISTIK','FINANCE'],
   scurve: ['TOP_MANAGEMENT', 'PJO', 'FINANCE', 'ENGINEERING'],
   boq: ['TOP_MANAGEMENT', 'PJO', 'FINANCE', 'ENGINEERING'],
   documents: ['TOP_MANAGEMENT', 'ENGINEERING', 'PJO', 'WORKSHOP'],
@@ -21,6 +23,7 @@ export function canAccess(role, pathname, method = 'GET') {
   if (moduleName === 'projects') return ['TOP_MANAGEMENT', 'PJO'].includes(role);
   if (moduleName === 'documents') return ['TOP_MANAGEMENT', 'ENGINEERING', 'PJO'].includes(role);
   if (['scurve', 'boq'].includes(moduleName)) return ['TOP_MANAGEMENT', 'ENGINEERING', 'PJO'].includes(role);
+  if (pathname.includes('/procurement/') && pathname.endsWith('/receive')) return ['TOP_MANAGEMENT','LOGISTIK'].includes(role);
   if (pathname === '/api/payroll/generate') return ['TOP_MANAGEMENT', 'HRD'].includes(role);
   return true;
 }

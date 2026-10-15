@@ -15,7 +15,7 @@ export default async function SCurvePage() {
   if (!canAccess(session.user.role, '/scurve')) redirect('/dashboard');
   if (!session) redirect('/login');
 
-  const projects = await prisma.project.findMany({
+  const projects = await prisma.project.findMany({take:1000,
     orderBy: { code: 'asc' },
     select: {
       id: true,

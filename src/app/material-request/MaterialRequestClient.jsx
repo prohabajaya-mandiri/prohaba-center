@@ -1,4 +1,5 @@
 'use client';
+import { apiFetch } from '@/lib/client-api';
 
 import { useState } from 'react';
 import { useRouter } from 'next/navigation';
@@ -31,9 +32,9 @@ export default function MaterialRequestClient({ requests, projects, user }) {
         priority,
         notes,
         items: validItems,
-        requestedBy: user.id
+
       };
-      const res = await fetch('/api/material-request', {
+      const res = await apiFetch('/api/material-request', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify(payload)
@@ -80,7 +81,7 @@ export default function MaterialRequestClient({ requests, projects, user }) {
           <FileText size={16} className="inline-block mr-2" />
           Daftar Material Request
         </button>
-        {user.role === 'PJO' && (
+        {['TOP_MANAGEMENT','PJO'].includes(user.role) && (
           <button className={`tab ${activeTab === 'create' ? 'active' : ''}`} onClick={() => setActiveTab('create')}>
             <Plus size={16} className="inline-block mr-2" />
             Buat Request Baru
@@ -116,9 +117,9 @@ export default function MaterialRequestClient({ requests, projects, user }) {
                       <td>{getStatusBadge(req.status)}</td>
                       <td style={{ fontSize: 12.5, color: 'var(--gray-500)' }}>{new Date(req.createdAt).toLocaleDateString('id-ID')}</td>
                       <td>
-                        <button className="btn btn-sm btn-outline">Detail</button>
-                        {user.role === 'LOGISTIK' && req.status === 'SUBMITTED' && (
-                          <button className="btn btn-sm btn-primary ml-2">Proses</button>
+                        <button className="btn btn-sm btn-outline" onClick={()=>showAlert(req.items.map(i=>i.description+' — '+i.quantity+' '+i.unit).join('\n'),'Detail MR')}>Detail</button>
+                        {['TOP_MANAGEMENT','PJO'].includes(user.role) && req.status === 'SUBMITTED' && (
+                          <button className="btn btn-sm btn-primary ml-2" onClick={async()=>{try{await apiFetch('/api/material-request/'+req.id,{method:'PATCH',headers:{'Content-Type':'application/json'},body:JSON.stringify({status:'APPROVED'})});router.refresh();}catch(e){await showAlert(e.message,'Gagal');}}}>Setujui</button>
                         )}
                       </td>
                     </tr>

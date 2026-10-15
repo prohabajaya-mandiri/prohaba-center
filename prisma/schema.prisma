@@ -18,6 +18,7 @@ model User {
   email     String   @unique
   password  String
   role      String // TOP_MANAGEMENT | HRD | PJO | LOGISTIK | FINANCE | ENGINEERING | WORKSHOP
+  sessionVersion Int @default(0)
   isActive  Boolean  @default(true)
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
@@ -45,7 +46,7 @@ model Project {
   name          String
   client        String
   location      String
-  contractValue Float
+  contractValue Decimal @db.Decimal(20, 2)
   startDate     DateTime
   endDate       DateTime
   status        String   @default("ACTIVE") // ACTIVE | COMPLETED | ON_HOLD
@@ -61,10 +62,12 @@ model Project {
   purchaseOrders    PurchaseOrder[]
   purchaseInvoices  PurchaseInvoice[]
   payrolls          Payroll[]
+  attendances       Attendance[]
   employees         EmployeeProject[]
   scurveBaselines   SCurveBaseline[]
   salesInvoices     SalesInvoice[]
   fabricationOrders FabricationOrder[]
+  sitePurchases     SitePurchase[]
   fuelLogs          FuelLog[]
   maintenanceLogs   MaintenanceLog[]
 }
@@ -85,11 +88,11 @@ model BOQItem {
   unit          String?
   quantity      Float?
   // Harga
-  costMaterial  Float? // harga satuan bahan
-  costLabor     Float? // harga satuan upah
-  totalMaterial Float? // jumlah bahan
-  totalLabor    Float? // jumlah upah
-  totalPrice    Float? // total harga item
+  costMaterial  Decimal? @db.Decimal(20, 2) // harga satuan bahan
+  costLabor     Decimal? @db.Decimal(20, 2) // harga satuan upah
+  totalMaterial Decimal? @db.Decimal(20, 2) // jumlah bahan
+  totalLabor    Decimal? @db.Decimal(20, 2) // jumlah upah
+  totalPrice    Decimal? @db.Decimal(20, 2) // total harga item
   // Bobot & Jadwal
   weight        Float? // bobot % dari total kontrak (auto-hitung)
   startMonth    String? // "2025-01" (YYYY-MM)
@@ -100,6 +103,9 @@ model BOQItem {
   project  Project        @relation(fields: [projectId], references: [id], onDelete: Cascade)
   progress ProgressItem[]
   actuals  BoqActual[]
+
+  @@unique([projectId, code])
+  @@index([projectId, sortOrder])
 }
 
 model BoqActual {
@@ -108,7 +114,7 @@ model BoqActual {
   projectId    String
   month        String // "2025-01"
   volumeActual Float?
-  costActual   Float?
+  costActual   Decimal? @db.Decimal(20, 2)
   progressPct  Float? // % progress aktual item ini bulan ini
   notes        String?
   inputBy      String
@@ -117,6 +123,9 @@ model BoqActual {
   boqItem BOQItem @relation(fields: [boqItemId], references: [id], onDelete: Cascade)
   project Project @relation(fields: [projectId], references: [id], onDelete: Cascade)
   user    User    @relation(fields: [inputBy], references: [id])
+
+  @@unique([boqItemId, month])
+  @@index([projectId, month])
 }
 
 model SCurveBaseline {
@@ -128,6 +137,7 @@ model SCurveBaseline {
   date      DateTime
 
   project Project @relation(fields: [projectId], references: [id], onDelete: Cascade)
+  @@index([projectId, date])
 }
 
 model ProgressItem {
@@ -144,6 +154,7 @@ model ProgressItem {
   project Project @relation(fields: [projectId], references: [id], onDelete: Cascade)
   boqItem BOQItem @relation(fields: [boqItemId], references: [id])
   user    User    @relation(fields: [inputBy], references: [id])
+  @@index([projectId, reportDate])
 }
 
 // ─── ENGINEERING & DOCUMENTS ──────────────────────────────────────────────────
@@ -166,6 +177,7 @@ model Document {
   project  Project @relation(fields: [projectId], references: [id], onDelete: Cascade)
   uploader User    @relation(fields: [uploadedBy], references: [id])
   content  DocumentContent?
+  @@index([projectId, createdAt])
 }
 
 // shortcut: Small private files live in Postgres; move to object storage for larger uploads.
@@ -192,6 +204,7 @@ model MaterialRequest {
   requester User           @relation(fields: [requestedBy], references: [id])
   items     MRItem[]
   po        PurchaseOrder?
+  @@index([projectId, status])
 }
 
 model MRItem {
@@ -203,6 +216,7 @@ model MRItem {
   specification String?
 
   mr MaterialRequest @relation(fields: [mrId], references: [id])
+  @@index([mrId])
 }
 
 // ─── PROCUREMENT & PURCHASE ORDER ────────────────────────────────────────────
@@ -230,7 +244,7 @@ model PurchaseOrder {
   vendorId    String
   mrId        String?  @unique
   status      String   @default("CREATED") // CREATED | SENT | CONFIRMED | PARTIAL | DELIVERED | INVOICED
-  totalAmount Float
+  totalAmount Decimal @db.Decimal(20, 2)
   notes       String?
   createdAt   DateTime @default(now())
   updatedAt   DateTime @updatedAt
@@ -240,6 +254,7 @@ model PurchaseOrder {
   mr              MaterialRequest? @relation(fields: [mrId], references: [id])
   items           POItem[]
   purchaseInvoice PurchaseInvoice?
+  @@index([projectId, status])
 }
 
 model POItem {
@@ -248,11 +263,12 @@ model POItem {
   description  String
   unit         String
   quantity     Float
-  unitPrice    Float
-  totalPrice   Float
+  unitPrice    Decimal @db.Decimal(20, 2)
+  totalPrice   Decimal @db.Decimal(20, 2)
   deliveredQty Float  @default(0)
 
   po PurchaseOrder @relation(fields: [poId], references: [id])
+  @@index([poId])
 }
 
 // ─── SITE PURCHASE (Anti-Markup) ──────────────────────────────────────────────
@@ -262,11 +278,12 @@ model PriceReference {
   itemCode    String   @unique
   description String
   unit        String
-  refPrice    Float // harga referensi pasar
+  refPrice    Decimal @db.Decimal(20, 2) // harga referensi pasar
   updatedAt   DateTime @updatedAt
 }
 
 model SitePurchase {
+  requestedBy String?
   id           String   @id @default(cuid())
   projectId    String
   purchaseDate DateTime
@@ -274,9 +291,9 @@ model SitePurchase {
   vendor       String
   unit         String
   quantity     Float
-  unitPrice    Float
-  totalAmount  Float
-  refPrice     Float? // harga referensi saat pembelian
+  unitPrice    Decimal @db.Decimal(20, 2)
+  totalAmount  Decimal @db.Decimal(20, 2)
+  refPrice     Decimal? @db.Decimal(20, 2) // harga referensi saat pembelian
   priceFlag    Boolean  @default(false) // true jika >10% di atas ref
   flagPct      Float? // % markup terdeteksi
   receiptUrl   String? // bukti struk
@@ -285,7 +302,10 @@ model SitePurchase {
   notes        String?
   createdAt    DateTime @default(now())
 
+  project Project @relation(fields: [projectId], references: [id])
   flags PurchaseFlag[]
+
+  @@index([projectId, purchaseDate])
 }
 
 model PurchaseFlag {
@@ -297,6 +317,7 @@ model PurchaseFlag {
 
   sitePurchase SitePurchase @relation(fields: [sitePurchaseId], references: [id])
   flagger      User         @relation(fields: [flaggedBy], references: [id])
+  @@index([sitePurchaseId])
 }
 
 // ─── FINANCE (ACCURATE KNOWLEDGE ADAPTATION) ────────────────────────────────
@@ -304,9 +325,10 @@ model PurchaseFlag {
 model GLAccount {
   id          String   @id @default(cuid())
   accountNo   String   @unique
+  purpose     String? @unique
   name        String
   accountType String // KAS_BANK | PIUTANG | PERSEDIAAN | AKTIVA_LANCAR_LAINNYA | AKTIVA_TETAP | AKUMULASI_PENYUSUTAN | HUTANG | KEWAJIBAN_JANGKA_PANJANG | EKUITAS | PENDAPATAN | HARGA_POKOK_PENJUALAN | BEBAN | BEBAN_LAIN_LAIN | PENDAPATAN_LAIN_LAIN
-  balance     Float    @default(0)
+  balance     Decimal    @default(0) @db.Decimal(20, 2)
   currency    String   @default("IDR")
   isActive    Boolean  @default(true)
   createdAt   DateTime @default(now())
@@ -318,14 +340,18 @@ model GLAccount {
 model JournalVoucher {
   id          String   @id @default(cuid())
   journalNo   String   @unique
+  projectId String?
   date        DateTime
   description String?
-  totalAmount Float    @default(0)
+  totalAmount Decimal    @default(0) @db.Decimal(20, 2)
   createdAt   DateTime @default(now())
   updatedAt   DateTime @updatedAt
 
   items        JournalVoucherItem[]
   salesInvoice SalesInvoice?
+  referenceKey String? @unique
+  reversedAt DateTime?
+  @@index([projectId, date])
 }
 
 model JournalVoucherItem {
@@ -333,11 +359,12 @@ model JournalVoucherItem {
   journalVoucherId String
   glAccountId      String
   description      String?
-  debit            Float   @default(0)
-  credit           Float   @default(0)
+  debit            Decimal   @default(0) @db.Decimal(20, 2)
+  credit           Decimal   @default(0) @db.Decimal(20, 2)
 
   journalVoucher JournalVoucher @relation(fields: [journalVoucherId], references: [id], onDelete: Cascade)
   glAccount      GLAccount      @relation(fields: [glAccountId], references: [id])
+  @@index([glAccountId])
 }
 
 model PurchaseInvoice {
@@ -348,11 +375,11 @@ model PurchaseInvoice {
   poId        String?   @unique
   invoiceDate DateTime
   dueDate     DateTime
-  amount      Float
-  tax         Float     @default(0)
-  totalAmount Float
+  amount      Decimal @db.Decimal(20, 2)
+  tax         Decimal     @default(0) @db.Decimal(20, 2)
+  totalAmount Decimal @db.Decimal(20, 2)
   status      String    @default("UNPAID") // UNPAID | PARTIAL | PAID | OVERDUE
-  paidAmount  Float     @default(0)
+  paidAmount  Decimal     @default(0) @db.Decimal(20, 2)
   paidDate    DateTime?
   notes       String?
   fileUrl     String?
@@ -362,13 +389,19 @@ model PurchaseInvoice {
   project  Project           @relation(fields: [projectId], references: [id], onDelete: Cascade)
   vendor   Vendor            @relation(fields: [vendorId], references: [id])
   po       PurchaseOrder?    @relation(fields: [poId], references: [id])
+  journalVoucherId String? @unique
   payments PurchasePayment[]
+
+  @@index([projectId, dueDate])
 }
 
 model PurchasePayment {
+  idempotencyKey String? @unique
+  bankAccountId String?
+  journalVoucherId String? @unique
   id        String   @id @default(cuid())
   invoiceId String
-  amount    Float
+  amount    Decimal @db.Decimal(20, 2)
   payDate   DateTime
   method    String // TRANSFER | CASH | GIRO
   reference String? // nomor transfer
@@ -376,6 +409,7 @@ model PurchasePayment {
   createdAt DateTime @default(now())
 
   purchaseInvoice PurchaseInvoice @relation(fields: [invoiceId], references: [id])
+  @@index([invoiceId, payDate])
 }
 
 model SalesInvoice {
@@ -385,10 +419,10 @@ model SalesInvoice {
   description String
 
   // Nominal & Pajak
-  subTotal    Float @default(0)
-  taxRate     Float @default(11) // PPN 11%
-  taxAmount   Float @default(0)
-  totalAmount Float @default(0)
+  subTotal    Decimal @default(0) @db.Decimal(20, 2)
+  taxRate     Decimal @default(11) @db.Decimal(20, 2) // PPN 11%
+  taxAmount   Decimal @default(0) @db.Decimal(20, 2)
+  totalAmount Decimal @default(0) @db.Decimal(20, 2)
 
   date     DateTime
   dueDate  DateTime?
@@ -396,6 +430,10 @@ model SalesInvoice {
   status   String    @default("UNPAID") // UNPAID | PAID | PARTIAL
 
   // Relasi Akuntansi
+  paidAmount Decimal @default(0) @db.Decimal(20, 2)
+  dpUsedAmount Decimal @default(0) @db.Decimal(20, 2)
+  appliedDownPayment Decimal @default(0) @db.Decimal(20, 2)
+  grossSubTotal Decimal @default(0) @db.Decimal(20, 2)
   journalVoucherId String? @unique
   downPaymentId    String? // Merujuk ke ID faktur DP yang dipotong
 
@@ -407,6 +445,9 @@ model SalesInvoice {
   journalVoucher JournalVoucher? @relation(fields: [journalVoucherId], references: [id])
   downPayment    SalesInvoice?   @relation("DownPayment", fields: [downPaymentId], references: [id])
   deductedBy     SalesInvoice[]  @relation("DownPayment")
+  receipts SalesReceipt[]
+
+  @@index([projectId, date])
 }
 
 // ─── HR & PAYROLL ─────────────────────────────────────────────────────────────
@@ -420,7 +461,7 @@ model Employee {
   position            String
   department          String
   employeeType        String // STAFF | HARIAN | BORONGAN
-  baseSalary          Float
+  baseSalary          Decimal @db.Decimal(20, 2)
   bpjsKetenagakerjaan String?
   bpjsKesehatan       String?
   npwp                String?
@@ -445,11 +486,21 @@ model EmployeeProject {
   endDate    DateTime?
   role       String
 
+  payType String @default("UNSET")
+  dailyRate Decimal? @db.Decimal(20, 2)
+  monthlyRate Decimal? @db.Decimal(20, 2)
+  overtimeRate Decimal? @db.Decimal(20, 2)
+
   employee Employee @relation(fields: [employeeId], references: [id])
   project  Project  @relation(fields: [projectId], references: [id], onDelete: Cascade)
+
+  @@unique([employeeId, projectId])
+  @@index([projectId, startDate])
 }
 
 model Attendance {
+  projectId String?
+  project Project? @relation(fields: [projectId], references: [id])
   id         String    @id @default(cuid())
   employeeId String
   date       DateTime
@@ -464,6 +515,9 @@ model Attendance {
   employee   Employee @relation(fields: [employeeId], references: [id])
   enterUser  User     @relation("AttendanceEntered", fields: [enteredBy], references: [id])
   verifyUser User?    @relation("AttendanceVerified", fields: [verifiedBy], references: [id])
+
+  @@unique([employeeId, date])
+  @@index([date])
 }
 
 model Payroll {
@@ -472,7 +526,7 @@ model Payroll {
   period      String // "2024-01" format YYYY-MM
   periodStart DateTime
   periodEnd   DateTime
-  totalAmount Float
+  totalAmount Decimal @db.Decimal(20, 2)
   status      String    @default("DRAFT") // DRAFT | SUBMITTED | HRD_APPROVED | FINANCE_APPROVED | PAID
   notes       String?
   lockedAt    DateTime? // setelah finance approve, tidak bisa diubah
@@ -482,6 +536,9 @@ model Payroll {
   project   Project           @relation(fields: [projectId], references: [id], onDelete: Cascade)
   items     PayrollItem[]
   approvals PayrollApproval[]
+
+  @@unique([projectId, period])
+  @@index([status, createdAt])
 }
 
 model PayrollItem {
@@ -490,16 +547,17 @@ model PayrollItem {
   employeeId  String
   workDays    Int
   overtime    Float   @default(0)
-  baseSalary  Float
-  overtimePay Float   @default(0)
-  allowances  Float   @default(0)
-  deductions  Float   @default(0)
-  bpjsPay     Float   @default(0)
-  netSalary   Float
+  baseSalary  Decimal @db.Decimal(20, 2)
+  overtimePay Decimal   @default(0) @db.Decimal(20, 2)
+  allowances  Decimal   @default(0) @db.Decimal(20, 2)
+  deductions  Decimal   @default(0) @db.Decimal(20, 2)
+  bpjsPay     Decimal   @default(0) @db.Decimal(20, 2)
+  netSalary   Decimal @db.Decimal(20, 2)
   notes       String?
 
   payroll  Payroll  @relation(fields: [payrollId], references: [id])
   employee Employee @relation(fields: [employeeId], references: [id])
+  @@index([payrollId])
 }
 
 model PayrollApproval {
@@ -513,6 +571,8 @@ model PayrollApproval {
 
   payroll  Payroll @relation(fields: [payrollId], references: [id])
   approver User    @relation(fields: [approvedBy], references: [id])
+
+  @@unique([payrollId, role])
 }
 
 // ─── AUDIT LOG ────────────────────────────────────────────────────────────────
@@ -562,6 +622,7 @@ model CuttingList {
   updatedAt DateTime @updatedAt
 
   fabricationOrder FabricationOrder @relation(fields: [fabricationOrderId], references: [id], onDelete: Cascade)
+  @@index([fabricationOrderId])
 }
 
 model DeliveryTicket {
@@ -577,6 +638,7 @@ model DeliveryTicket {
   updatedAt DateTime @updatedAt
 
   fabricationOrder FabricationOrder @relation(fields: [fabricationOrderId], references: [id], onDelete: Cascade)
+  @@index([fabricationOrderId, status])
 }
 
 // ─── KENDARAAN & ALAT BERAT ───────────────────────────────────────────────────
@@ -603,7 +665,7 @@ model FuelLog {
   date       DateTime
   fuelType   String // SOLAR | DEXLITE | PERTAMAX | etc
   liters     Float
-  totalCost  Float
+  totalCost  Decimal @db.Decimal(20, 2)
   meterValue Float? // Odometer or Hour Meter
   operator   String?
   notes      String?
@@ -615,6 +677,8 @@ model FuelLog {
   vehicle Vehicle  @relation(fields: [vehicleId], references: [id])
   project Project? @relation(fields: [projectId], references: [id])
   user    User     @relation(fields: [recordedBy], references: [id])
+  @@index([projectId, date])
+  @@index([vehicleId, date])
 }
 
 model MaintenanceLog {
@@ -624,7 +688,7 @@ model MaintenanceLog {
   date        DateTime
   type        String // SERVICE | GANTI_OLI | SPAREPART | REPAIR
   description String
-  cost        Float
+  cost        Decimal @db.Decimal(20, 2)
   meterValue        Float? // Odometer or Hour Meter when serviced
   mechanic          String?
   notes             String?
@@ -639,4 +703,53 @@ model MaintenanceLog {
   vehicle Vehicle  @relation(fields: [vehicleId], references: [id])
   project Project? @relation(fields: [projectId], references: [id])
   user    User     @relation(fields: [recordedBy], references: [id])
+  @@index([vehicleId, date])
+}
+
+model SalesReceipt {
+  id String @id @default(cuid())
+  invoiceId String
+  amount Decimal @db.Decimal(20, 2)
+  payDate DateTime
+  reference String @unique
+  bankAccountId String
+  journalVoucherId String @unique
+  invoice SalesInvoice @relation(fields: [invoiceId], references: [id])
+}
+
+model DocumentSequence {
+  key String @id
+  value Int @default(0)
+}
+
+model LoginAttempt {
+  key String @id
+  attempts Int @default(0)
+  resetAt DateTime
+  @@index([resetAt])
+}
+
+model PayrollPayment {
+ id String @id @default(cuid())
+ payrollId String @unique
+ amount Decimal @db.Decimal(20, 2)
+ payDate DateTime
+ bankAccountId String
+ reference String @unique
+ journalVoucherId String @unique
+}
+
+model PurchaseReceipt {
+ id String @id @default(cuid())
+ poId String
+ reference String @unique
+ receivedAt DateTime
+ items Json
+ @@index([poId])
+}
+
+model SiteReceipt {
+ sitePurchaseId String @id
+ data Bytes
+ fileName String
 }

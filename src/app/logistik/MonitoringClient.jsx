@@ -357,7 +357,7 @@ export default function MonitoringClient({ vehicles, fuelLogs, maintenanceLogs }
                   <div style={{ padding: '32px', textAlign: 'center', color: 'var(--gray-400)' }}>
                     <Wrench size={36} style={{ margin: '0 auto 12px', opacity: 0.3 }} />
                     <p style={{ fontSize: '13px' }}>Belum ada data tracking sparepart.</p>
-                    <p style={{ fontSize: '12px', marginTop: '4px' }}>Saat input servis, isi kolom "Target HM Berikutnya" atau "Jadwal Servis Berikutnya".</p>
+                    <p style={{ fontSize: '12px', marginTop: '4px' }}>Saat input servis, isi kolom &quot;Target HM Berikutnya&quot; atau &quot;Jadwal Servis Berikutnya&quot;.</p>
                   </div>
                 ) : (
                   sparepartLogs.map(log => {

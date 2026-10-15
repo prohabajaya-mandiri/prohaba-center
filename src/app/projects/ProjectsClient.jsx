@@ -1,4 +1,5 @@
 'use client';
+import { apiFetch } from '@/lib/client-api';
 
 import { useState } from 'react';
 import { useRouter } from 'next/navigation';
@@ -15,19 +16,19 @@ export default function ProjectsClient({ initialProjects, user }) {
 
   const handleDeleteProject = async (id, code) => {
     const confirmed = await showConfirm(
-      `Apakah Anda yakin ingin menghapus permanen proyek ${code}? Semua data terkait (BOQ, Progress, S-Curve, dsb) akan ikut terhapus.`,
+      `Apakah Anda yakin ingin mengarsipkan proyek ${code}? Data dan histori proyek tetap disimpan.`,
       'Hapus Permanen Proyek'
     );
     if (!confirmed) return;
 
     try {
-      const res = await fetch(`/api/projects/${id}`, { method: 'DELETE' });
+      const res = await apiFetch(`/api/projects/${id}`, { method: 'DELETE' });
       if (!res.ok) {
         const error = await res.json();
         throw new Error(error.error || 'Gagal menghapus proyek');
       }
       setProjects(prev => prev.filter(p => p.id !== id));
-      await showAlert('Proyek berhasil dihapus.', 'Sukses');
+      await showAlert('Proyek berhasil diarsipkan.', 'Sukses');
       router.refresh();
     } catch (error) {
       await showAlert(error.message, 'Error');
@@ -42,7 +43,7 @@ export default function ProjectsClient({ initialProjects, user }) {
     e.preventDefault();
     setIsSubmitting(true);
     try {
-      const res = await fetch('/api/projects', {
+      const res = await apiFetch('/api/projects', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify(formData)
@@ -82,7 +83,7 @@ export default function ProjectsClient({ initialProjects, user }) {
     e.preventDefault();
     setIsSubmitting(true);
     try {
-      const res = await fetch(`/api/projects/${editingProject.id}`, {
+      const res = await apiFetch(`/api/projects/${editingProject.id}`, {
         method: 'PATCH',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify(editingProject),

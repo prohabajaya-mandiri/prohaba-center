@@ -1,3 +1,4 @@
+import {pagination,text} from '@/lib/validation';
 import { authorizeApi } from '@/lib/api-access';
 import { NextResponse } from 'next/server';
 import { prisma } from '@/lib/prisma';
@@ -16,14 +17,12 @@ export async function GET(request) {
     const search = searchParams.get('search'); // Used for User Name
     
     // Pagination
-    const page = parseInt(searchParams.get('page') || '1');
-    const limit = parseInt(searchParams.get('limit') || '50');
-    const skip = (page - 1) * limit;
+    const {page,limit,skip}=pagination(searchParams);
 
     const where = {};
     if (moduleFilter) where.module = moduleFilter;
     if (actionFilter) where.action = actionFilter;
-    if (search) {
+    if (search) { text(search,'Pencarian',200);
       where.user = {
         name: { contains: search, mode: 'insensitive' }
       };
@@ -53,6 +52,6 @@ export async function GET(request) {
     });
   } catch (error) {
     console.error('AuditLog GET Error:', error);
-    return NextResponse.json({ error: 'Internal Server Error' }, { status: 500 });
+    return NextResponse.json({ error: 'Internal Server Error' }, { status: error.status??500 });
   }
 }

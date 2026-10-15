@@ -1,6 +1,7 @@
 'use client'
+import { apiFetch } from '@/lib/client-api';
 
-import React, { useState, useEffect } from 'react'
+import React, { useState, useEffect, useCallback } from 'react'
 import { motion, AnimatePresence } from 'framer-motion'
 import { 
   History, Search, RefreshCw, ChevronLeft, ChevronRight, Eye, X
@@ -18,7 +19,7 @@ export default function AuditLogClient() {
   
   const [selectedLog, setSelectedLog] = useState(null)
 
-  const fetchLogs = async () => {
+  const fetchLogs = useCallback(async () => {
     setLoading(true)
     try {
       const query = new URLSearchParams({ page, limit: 20 })
@@ -26,7 +27,7 @@ export default function AuditLogClient() {
       if (moduleFilter) query.append('module', moduleFilter)
       if (actionFilter) query.append('action', actionFilter)
 
-      const res = await fetch(`/api/audit-log?${query}`)
+      const res = await apiFetch(`/api/audit-log?${query}`)
       const data = await res.json()
       
       if (res.ok) {
@@ -38,14 +39,11 @@ export default function AuditLogClient() {
     } finally {
       setLoading(false)
     }
-  }
+  }, [page,search,moduleFilter,actionFilter])
 
-  useEffect(() => { fetchLogs() }, [page, moduleFilter, actionFilter])
+  useEffect(() => { const timer=setTimeout(fetchLogs,300); return ()=>clearTimeout(timer); }, [fetchLogs])
 
-  useEffect(() => {
-    const timer = setTimeout(() => { setPage(1); fetchLogs() }, 500)
-    return () => clearTimeout(timer)
-  }, [search])
+
 
   const getActionColor = (action) => {
     switch(action) {

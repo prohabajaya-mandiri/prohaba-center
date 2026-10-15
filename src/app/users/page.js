@@ -1,3 +1,5 @@
+import ListPager from '@/components/ListPager';
+import {pageQuery} from '@/lib/page-query';
 import { canAccess } from '@/lib/access';
 import { auth } from '@/lib/auth';
 import { prisma } from '@/lib/prisma';
@@ -5,14 +7,17 @@ import { redirect } from 'next/navigation';
 import AppLayout from '@/components/AppLayout';
 import UsersClient from './UsersClient';
 
-export default async function UsersPage() {
+export default async function UsersPage({searchParams}) {
   const session = await auth();
   if (!session?.user) redirect('/login');
   if (!canAccess(session.user.role, '/users')) redirect('/dashboard');
   if (!session) redirect('/login');
   if (session.user.role !== 'TOP_MANAGEMENT') redirect('/dashboard');
 
+  const paging=await pageQuery(searchParams);
+  const total=await prisma.user.count();
   const users = await prisma.user.findMany({
+    skip:paging.skip, take:paging.take,
     orderBy: { createdAt: 'desc' },
     select: {
       id: true,
@@ -27,6 +32,6 @@ export default async function UsersPage() {
   return (
     <AppLayout title="Manajemen Pengguna" subtitle="Kelola akun dan hak akses sistem" user={session.user}>
       <UsersClient initialUsers={users} />
-    </AppLayout>
+    <ListPager page={paging.page} total={total}/></AppLayout>
   );
 }

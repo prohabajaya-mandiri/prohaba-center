@@ -1,75 +1,62 @@
-import { canAccess } from '@/lib/access';
-import { prisma } from '@/lib/prisma'
-import PayrollClient from './PayrollClient'
-import { auth } from '@/lib/auth'
-import { redirect } from 'next/navigation'
-import AppLayout from '@/components/AppLayout'
-
-export const revalidate = 0
-
-export default async function PayrollPage() {
+import { canAccess } from "@/lib/access";
+import { auth } from "@/lib/auth";
+import { redirect } from "next/navigation";
+import { prisma } from "@/lib/prisma";
+import AppLayout from "@/components/AppLayout";
+import ListPager from "@/components/ListPager";
+import { pageQuery } from "@/lib/page-query";
+import PayrollClient from "./PayrollClient";
+export default async function PayrollPage({ searchParams }) {
   const session = await auth();
-  if (!session?.user) redirect('/login');
-  if (!canAccess(session.user.role, '/payroll')) redirect('/dashboard');
-  if (!session) redirect('/login');
-  const payrolls = await prisma.payroll.findMany({
-    include: {
-      project: true,
-      items: {
-        include: {
-          employee: true
-        }
-      },
-      approvals: {
-        include: {
-          approver: { select: { id: true, name: true, role: true } }
+  if (!session?.user) redirect("/login");
+  if (!canAccess(session.user.role, "/payroll")) redirect("/dashboard");
+  const paging = await pageQuery(searchParams);
+  const [rows, total, projects, accounts] = await Promise.all([
+    prisma.payroll.findMany({
+      skip: paging.skip,
+      take: paging.take,
+      orderBy: { createdAt: "desc" },
+      include: {
+        project: { select: { name: true } },
+        items: {
+          include: { employee: { select: { name: true, position: true } } },
         },
-        orderBy: {
-          createdAt: 'desc'
-        }
-      }
-    },
-    orderBy: {
-      createdAt: 'desc'
-    }
-  })
-
-  // Format data for client
-  const formattedPayrolls = payrolls.map(p => ({
-    id: p.id,
-    period: p.period,
+        approvals: {
+          include: { approver: { select: { name: true } } },
+          orderBy: { createdAt: "desc" },
+        },
+      },
+    }),
+    prisma.payroll.count(),
+    prisma.project.findMany({
+      where: { status: "ACTIVE" },
+      select: { id: true, name: true },
+      take: 1000,
+    }),
+    prisma.gLAccount.findMany({
+      where: { accountType: "KAS_BANK", isActive: true },
+      select: { id: true, accountNo: true, name: true },
+      take: 500,
+    }),
+  ]);
+  const payrolls = rows.map((p) => ({
+    ...p,
     projectName: p.project.name,
-    totalAmount: p.totalAmount,
-    status: p.status,
-    notes: p.notes,
-    createdAt: p.createdAt.toISOString(),
-    employeeCount: p.items.length,
-    items: p.items.map(item => ({
-      id: item.id,
-      employeeName: item.employee.name,
-      position: item.employee.position,
-      baseSalary: item.baseSalary,
-      workDays: item.workDays,
-      overtime: item.overtime,
-      overtimePay: item.overtimePay,
-      allowances: item.allowances,
-      deductions: item.deductions,
-      bpjsPay: item.bpjsPay,
-      netSalary: item.netSalary,
-    })),
-    approvals: p.approvals.map(app => ({
-      id: app.id,
-      approverName: app.approver.name,
-      role: app.role,
-      action: app.action,
-      notes: app.notes,
-      createdAt: app.createdAt.toISOString()
-    }))
-  }))
-
+    items: p.items.map((i) => ({ ...i, employeeName: i.employee.name })),
+  }));
   return (
-    <AppLayout title="Payroll" subtitle="Manajemen Gaji & Persetujuan" user={session.user}>
-      <PayrollClient payrolls={formattedPayrolls} />
+    <AppLayout
+      title="Payroll"
+      subtitle="Absensi → Tarif penugasan → Persetujuan → Pembayaran"
+      user={session.user}
+    >
+      <PayrollClient
+        payrolls={payrolls}
+        projects={projects}
+        accounts={accounts}
+        user={session.user}
+      />
+      <ListPager page={paging.page} total={total} />
     </AppLayout>
-  )
+  );
 }

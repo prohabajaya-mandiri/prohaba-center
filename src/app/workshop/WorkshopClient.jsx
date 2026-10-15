@@ -1,4 +1,6 @@
 'use client';
+import { businessToday } from '@/lib/client-api';
+import { apiFetch } from '@/lib/client-api';
 
 import React, { useState, useMemo } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
@@ -34,7 +36,7 @@ export default function WorkshopClient({ initialOrders, projects }) {
   });
   
   const [deliveryForm, setDeliveryForm] = useState({
-    fabricationOrderId: '', driverName: '', vehicleNumber: '', deliveryDate: new Date().toISOString().split('T')[0]
+    fabricationOrderId: '', driverName: '', vehicleNumber: '', deliveryDate: businessToday()
   });
 
   const [printDoc, setPrintDoc] = useState(null);
@@ -53,7 +55,7 @@ export default function WorkshopClient({ initialOrders, projects }) {
     e.preventDefault();
     setSubmitting(true);
     try {
-      const res = await fetch('/api/workshop/orders', {
+      const res = await apiFetch('/api/workshop/orders', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify(orderForm)
@@ -72,7 +74,7 @@ export default function WorkshopClient({ initialOrders, projects }) {
     e.preventDefault();
     setSubmitting(true);
     try {
-      const res = await fetch('/api/workshop/cutting-list', {
+      const res = await apiFetch('/api/workshop/cutting-list', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify(cuttingForm)
@@ -91,7 +93,7 @@ export default function WorkshopClient({ initialOrders, projects }) {
     e.preventDefault();
     setSubmitting(true);
     try {
-      const res = await fetch('/api/workshop/deliveries', {
+      const res = await apiFetch('/api/workshop/deliveries', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify(deliveryForm)
@@ -108,7 +110,7 @@ export default function WorkshopClient({ initialOrders, projects }) {
 
   const updateOrderStatus = async (id, status) => {
     try {
-      await fetch(`/api/workshop/orders/${id}`, {
+      await apiFetch(`/api/workshop/orders/${id}`, {
         method: 'PATCH',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ status })
@@ -121,7 +123,7 @@ export default function WorkshopClient({ initialOrders, projects }) {
 
   const updateCuttingStatus = async (id, status) => {
     try {
-      await fetch(`/api/workshop/cutting-list/${id}`, {
+      await apiFetch(`/api/workshop/cutting-list/${id}`, {
         method: 'PATCH',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ status })
@@ -136,7 +138,7 @@ export default function WorkshopClient({ initialOrders, projects }) {
     const confirmed = await showConfirm('Hapus data ini?', 'Konfirmasi');
     if (!confirmed) return;
     try {
-      await fetch(`/api/workshop/${type}/${id}`, { method: 'DELETE' });
+      await apiFetch(`/api/workshop/${type}/${id}`, { method: 'DELETE' });
       window.location.reload();
     } catch (err) {
       await showAlert('Gagal menghapus', 'Error');
@@ -151,7 +153,7 @@ export default function WorkshopClient({ initialOrders, projects }) {
 
   const openDeliveryModal = (order) => {
     setSelectedOrder(order);
-    setDeliveryForm({ fabricationOrderId: order.id, driverName: '', vehicleNumber: '', deliveryDate: new Date().toISOString().split('T')[0] });
+    setDeliveryForm({ fabricationOrderId: order.id, driverName: '', vehicleNumber: '', deliveryDate: businessToday() });
     setIsDeliveryModalOpen(true);
   };
 
@@ -276,7 +278,7 @@ export default function WorkshopClient({ initialOrders, projects }) {
                   <td style={{ textAlign: 'right' }}>
                     <div style={{ display: 'flex', justifyContent: 'flex-end', gap: '8px' }}>
                       <button className="btn-ghost" style={{ padding: '8px', borderRadius: '8px', color: 'var(--blue-600)' }} onClick={() => openCuttingModal(o)} title="Tambah Cutting List"><Scissors size={18} /></button>
-                      <button className="btn-ghost" style={{ padding: '8px', borderRadius: '8px', color: 'var(--green-600)' }} onClick={() => openDeliveryModal(o)} title="Kirim / Buat Surat Jalan"><Truck size={18} /></button>
+                      <button className="btn-ghost" style={{ padding: '8px', borderRadius: '8px', color: 'var(--green-600)' }} disabled={o.status!=='COMPLETED'||o.deliveries.length>0} onClick={() => openDeliveryModal(o)} title="Kirim / Buat Surat Jalan"><Truck size={18} /></button>
                       {o.status === 'PLANNED' && (
                         <button className="btn-ghost" style={{ padding: '8px', borderRadius: '8px', color: 'var(--blue-600)' }} onClick={() => updateOrderStatus(o.id, 'IN_PROGRESS')} title="Mulai Proses"><Check size={18} /></button>
                       )}
@@ -317,7 +319,7 @@ export default function WorkshopClient({ initialOrders, projects }) {
                   <td><span className="badge badge-neutral" style={{ fontSize: '11px', padding: '4px 8px', borderRadius: '6px', fontWeight: 600 }}>{d.status}</span></td>
                   <td style={{ textAlign: 'right' }}>
                     <div style={{ display: 'flex', justifyContent: 'flex-end', gap: '8px' }}>
-                      <button className="btn-ghost" style={{ padding: '8px', borderRadius: '8px', color: 'var(--blue-600)' }} onClick={() => printSJ(d, d.order)} title="Cetak Surat Jalan"><Printer size={18} /></button>
+                      <button className="btn-ghost" style={{ padding: '8px', borderRadius: '8px', color: 'var(--blue-600)' }} onClick={() => printSJ(d, d.order)} title="Cetak Surat Jalan"><Printer size={18} /></button>{d.status==='IN_TRANSIT'&&<button className="btn btn-primary" onClick={async()=>{try{await apiFetch('/api/workshop/deliveries/'+d.id,{method:'PATCH',headers:{'Content-Type':'application/json'},body:JSON.stringify({status:'RECEIVED_AT_SITE'})});window.location.reload();}catch(e){await showAlert(e.message,'Gagal');}}}>Terima di site</button>}
                     </div>
                   </td>
                 </tr>

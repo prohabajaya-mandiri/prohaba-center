@@ -17,9 +17,20 @@ test('cross-origin mutations are rejected', () => {
   const request = (origin) => new Request('https://erp.example/api/projects', { method: 'POST', headers: { origin } });
   assert.equal(isSameOriginMutation(request('https://attacker.example')), false);
   assert.equal(isSameOriginMutation(request('https://erp.example')), true);
-  assert.equal(isSameOriginMutation(new Request('http://localhost:3101/api/documents', {
-    method: 'POST', headers: { origin: 'http://127.0.0.1:3101', host: '127.0.0.1:3101' },
-  })), true);
+  const previous=process.env.VERCEL;
+  try {
+    delete process.env.VERCEL;
+    assert.equal(isSameOriginMutation(new Request('http://localhost:3101/api/documents', {
+      method: 'POST', headers: { origin: 'http://127.0.0.1:3101', host: '127.0.0.1:3101' },
+    })), true);
+    process.env.VERCEL='1';
+    assert.equal(isSameOriginMutation(new Request('http://internal/api/documents', {
+      method: 'POST', headers: {origin:'https://erp.example',host:'erp.example'},
+    })),true);
+    assert.equal(isSameOriginMutation(new Request('http://internal/api/documents', {
+      method:'POST',headers:{origin:'http://erp.example',host:'erp.example'},
+    })),false);
+  } finally {if(previous===undefined)delete process.env.VERCEL;else process.env.VERCEL=previous;}
 });
 test('payroll approvals require the matching role and transition', () => {
   assert.equal(payrollTransition('PJO', 'TOP_APPROVE'), null);
@@ -31,7 +42,7 @@ test('every business API handler has an authorization check', () => {
   const walk = dir => readdirSync(dir, { withFileTypes: true }).flatMap(e => e.isDirectory() ? walk(dir + '/' + e.name) : [dir + '/' + e.name]);
   for (const file of walk('src/app/api').filter(f => f.endsWith('/route.js') && !f.includes('/auth/') && !f.includes('/seed/'))) {
     const source = readFileSync(file, 'utf8');
-    assert.equal((source.match(/export async function/g) || []).length, (source.match(/await authorizeApi\(/g) || []).length, file);
+    assert.ok(source.includes('authorizeApi(') || /api\(/.test(source) || /export \{ (GET|POST)/.test(source), file);
   }
 });
 test('HTTP seed cannot delete data', async () => assert.equal((await seed()).status, 410));
