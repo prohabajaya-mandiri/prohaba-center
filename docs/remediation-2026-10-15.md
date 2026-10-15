@@ -1,6 +1,6 @@
 # Laporan perbaikan audit Prohaba Center
 
-Tanggal: 15 Oktober 2026. Lingkup: 20 temuan audit, koneksi Supabase, keamanan pengembangan, dan deployment Vercel.
+Audit: 15 Oktober 2026. Penyelesaian rilis: 16 Oktober 2026 WITA. Lingkup: 20 temuan audit, koneksi Supabase, keamanan pengembangan, dan deployment Vercel.
 
 ## Keputusan operasional
 
@@ -28,7 +28,7 @@ Tanggal: 15 Oktober 2026. Lingkup: 20 temuan audit, koneksi Supabase, keamanan p
 | 13 | Dokumen tidak konsisten dengan izin Workshop/proyek aktif | Halaman mengikuti izin modul dan menerima proyek ACTIVE/ON_HOLD; dokumen privat diunduh lewat pemeriksaan sesi | Workshop dapat membaca dokumen berizin; unduhan anonim ditolak; Workshop tidak dapat menghapus |
 | 14 | Delete workshop salah ID dan status terkirim terlalu cepat | ID route benar, transisi berurutan, item harus selesai sebelum kirim, WO DELIVERED hanya setelah diterima di site | Siklus fabrikasi/potong/las/selesai/kirim/terima dan penghapusan WO rencana |
 | 15 | Penomoran count+1 dan duplikasi transaksi | Counter atomik DocumentSequence; unique constraint pada payroll, absensi, realisasi, approval dan referensi pembayaran/penerimaan | Tiga WO bersamaan menghasilkan nomor berbeda; absensi dan pembayaran ulang tidak ganda |
-| 16 | Runtime memakai akun pemilik dan kredensial pengembangan bercampur | Runtime non-pemilik dengan RLS; token administrasi dan URL migrasi disimpan terpisah; development/preview memakai skema dan secret sendiri | Pemeriksaan owner, bypass RLS, CREATE schema dan hak audit; verifikasi environment deployment |
+| 16 | Runtime memakai akun pemilik dan kredensial pengembangan bercampur | Runtime non-pemilik dengan RLS; token administrasi dan URL migrasi disimpan terpisah; login pemilik lama dinonaktifkan setelah rilis baru terverifikasi; development/preview memakai skema dan secret sendiri | Pemeriksaan owner, bypass RLS, CREATE schema dan hak audit; verifikasi environment deployment |
 | 17 | Query tidak dibatasi dan indeks belum memadai | Riwayat utama dipaginasi 50 baris, API maksimal 100; indeks foreign key/filter/jurnal; batas file/arsip/BOQ; impor/jadwal memakai operasi sekaligus | Uji paginasi/arsip dan impor ulang 1.000 BOQ beserta jadwal; ringkasan logistik diberi lingkup halaman yang jelas |
 | 18 | Lint gagal dan pengujian/CI kurang | Lint dibersihkan; pengujian validasi, uang, sesi, parser dan kurva ditambah; pengujian HTTP lintas fitur; workflow CI | npm run verify: lint, 12 uji unit, build; pengujian integrasi terpisah |
 | 19 | Dependensi memiliki advisory tinggi | deepmerge-ts dan mysql2 diperbarui melalui override; dependensi lint yang membawa braces tanpa patch diganti dengan pemeriksaan React/hooks | npm audit melaporkan 0 kerentanan pada instalasi yang diperiksa |
@@ -59,3 +59,9 @@ Seeder lama yang menghapus data dan memakai password bawaan diganti dengan boots
 ## Bukti lokal
 
 Output pengujian, manifest backup terenkripsi, uji pemulihan dan identitas deployment disimpan di direktori .vercel yang tidak masuk Git. Kunci backup berada di .env.backup.local. Nilai rahasia tidak dicantumkan dalam laporan ini.
+
+## Hasil rilis
+
+Rilis produksi aktif pada https://prohaba-center.vercel.app, deployment dpl_ScE2veXrAGAM1bsVNJeaZLEb3DBS. Login, sidebar dan 16 halaman utama diverifikasi melalui pemeriksaan baca. Database produksi memiliki 42 tabel dengan RLS, runtime bukan pemilik tabel, dan empat migrasi sudah diterapkan.
+
+Source tersedia pada draft PR https://github.com/prohabajaya-mandiri/prohaba-center/pull/1. Main belum digabungkan. CI GitHub dan deployment preview berhasil; hasil akhir per commit dapat dilihat pada PR.

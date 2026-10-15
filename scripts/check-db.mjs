@@ -11,6 +11,11 @@ try {
   assert.equal(ownership.count,0,'Runtime must not own tables');
   const [audit] = await prisma.$queryRaw`SELECT has_table_privilege(current_user,${schema+'."AuditLog"'},'DELETE') AS delete,has_table_privilege(current_user,${schema+'."AuditLog"'},'UPDATE') AS update,has_schema_privilege(current_user,${schema},'CREATE') AS create`;
   assert.equal(audit.delete,false);assert.equal(audit.update,false);assert.equal(audit.create,false);
+  const otherSchema=schema==='public'?'prohaba_dev':'public';
+  const [isolation]=await prisma.$queryRaw`SELECT bool_or(has_table_privilege(current_user,c.oid,'SELECT')) AS can_read FROM pg_class c JOIN pg_namespace n ON n.oid=c.relnamespace WHERE n.nspname=${otherSchema} AND c.relkind='r'`;
+  assert.equal(isolation.can_read,false,'Runtime must not read the other environment');
+  const ownerLogins=await prisma.$queryRaw`SELECT rolcanlogin FROM pg_roles WHERE rolname IN ('prohaba_app','prohaba_dev')`;
+  assert.equal(ownerLogins.length,2);assert.ok(ownerLogins.every(role=>!role.rolcanlogin),'Old owner logins must remain disabled');
   const tables = await prisma.$queryRaw`
     SELECT relname, relrowsecurity FROM pg_class
     WHERE relnamespace = ${schema}::regnamespace AND relkind = 'r'

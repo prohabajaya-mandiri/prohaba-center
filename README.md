@@ -16,7 +16,7 @@ Koneksi memakai TLS dengan verifikasi sertifikat penuh. CA publik Supabase terse
 
 ## Migrasi dan akun admin
 
-Kredensial pemilik hanya disimpan di .env.migrations.development.local dan .env.migrations.production.local. Kedua file tidak dimuat otomatis oleh Next.js.
+Kredensial migrasi prohaba_migrate_dev/prohaba_migrate hanya disimpan di .env.migrations.development.local dan .env.migrations.production.local. Akun ini mewarisi hak pemilik tabel untuk migrasi; login langsung pemilik lama sudah dinonaktifkan. Kedua file tidak dimuat otomatis oleh Next.js.
 
     npm run db:migrate
     npm run seed

@@ -1,6 +1,8 @@
 import {readFileSync,writeFileSync,renameSync} from 'node:fs';
 import {parseEnv} from 'node:util';
 import {randomBytes} from 'node:crypto';
+const ready=JSON.parse(readFileSync('.vercel/remediation-ready.json','utf8')),probe=JSON.parse(readFileSync('.vercel/production-readonly-result.json','utf8'));
+if(ready.state!=='READY'||!probe.login||!probe.sidebar||probe.pages.length<16||new Date(probe.at)<new Date(ready.at))throw new Error('Verify the replacement production release before retiring old logins.');
 const management=parseEnv(readFileSync('.env.management.local','utf8')),q=value=>"'"+value.replaceAll("'","''")+"'",pending=[];
 let query='BEGIN;';
 for(const [environment,owner,role]of [['production','prohaba_app','prohaba_migrate'],['development','prohaba_dev','prohaba_migrate_dev']]){
