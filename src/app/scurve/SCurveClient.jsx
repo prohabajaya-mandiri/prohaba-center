@@ -210,7 +210,6 @@ export default function SCurveClient({ projects, user }) {
     setSavingSchedule(true);
     try {
       const updates = Object.entries(scheduleEdits)
-        
         .map(([id, v]) => ({ id, startMonth: v.startMonth || null, endMonth: v.endMonth || null }));
       const res = await apiFetch('/api/boq/schedule', {
         method: 'PUT',

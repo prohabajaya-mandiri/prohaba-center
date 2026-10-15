@@ -27,7 +27,7 @@ export default async function ProjectsPage({searchParams}) {
   return (
     <AppLayout 
       title="Manajemen Proyek" 
-      subtitle={`${total} proyek tercatat`} 
+      subtitle={`${total} proyek tercatat`}
       user={session.user}
     >
       <ProjectsClient initialProjects={projects} user={session.user} />

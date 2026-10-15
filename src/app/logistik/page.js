@@ -46,7 +46,7 @@ export default async function LogistikPage({searchParams}) {
 
   return (
     <AppLayout title="Kendaraan & Alat Berat" subtitle="Monitoring pemakaian BBM dan perawatan logistik." user={session?.user}>
-      <p>Ringkasan pemakaian dan deteksi anomali dihitung dari riwayat pada halaman ini (50 catatan per jenis).</p><LogistikClient 
+      <p>Ringkasan pemakaian dan deteksi anomali dihitung dari riwayat pada halaman ini (50 catatan per jenis).</p><LogistikClient
         user={session?.user} 
         vehicles={vehicles} 
         fuelLogs={fuelLogs} 
