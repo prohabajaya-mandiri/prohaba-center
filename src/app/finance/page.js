@@ -11,6 +11,7 @@ import AppLayout from "@/components/AppLayout";
 import ListPager from "@/components/ListPager";
 import { pageQuery } from "@/lib/page-query";
 import FinanceClient from "./FinanceClient";
+import { currentTab, tabLabel } from "@/lib/module-tabs";
 
 export const metadata = { title: 'Keuangan & Hutang' };
 export default async function FinancePage({ searchParams }) {
@@ -18,6 +19,7 @@ export default async function FinancePage({ searchParams }) {
   if (!session?.user) redirect("/login");
   if (!canAccess(session.user.role, "/finance")) redirect("/dashboard");
   const paging = await pageQuery(searchParams);
+  const tab = currentTab("/finance", (await searchParams)?.tab, session.user.role);
   const [
     glAccounts,
     profitData,
@@ -59,11 +61,12 @@ export default async function FinancePage({ searchParams }) {
   ]);
   return (
     <AppLayout
-      title="Keuangan & Akuntansi"
-      subtitle="Saldo jurnal, hutang, pembayaran, dan laba proyek"
+      title="Keuangan & Hutang"
+      subtitle={tabLabel("/finance", tab)}
       user={session.user}
     >
       <FinanceClient
+        tab={tab}
         glAccounts={glAccounts}
         profitData={profitData}
         summary={summary[0]}
@@ -72,7 +75,7 @@ export default async function FinancePage({ searchParams }) {
         projects={projects}
         vendors={vendors}
       />
-      <ListPager page={paging.page} total={total} />
+      {tab === "hutang" && <ListPager page={paging.page} total={total} query={{ tab }} />}
     </AppLayout>
   );
 }

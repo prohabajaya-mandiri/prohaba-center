@@ -3,23 +3,17 @@ import { apiFetch, businessToday } from '@/lib/client-api';
 
 import { useMemo, useState } from 'react';
 import { useRouter } from 'next/navigation';
-import { Wrench, Plus, Check, Printer, Scissors, Truck, Trash2, PackageCheck } from 'lucide-react';
+import { Plus, Check, Printer, Scissors, Truck, Trash2, PackageCheck } from 'lucide-react';
 import { useDialog } from '@/components/DialogProvider';
 import { EmptyRow, Modal, PrintDoc, SearchField, StatusBadge, printDocument } from '@/components/ui';
 import { fmtDate } from '@/lib/ui-labels';
 
 const ORDER_LABELS = { COMPLETED: 'Selesai fabrikasi', DELIVERED: 'Terkirim' };
-const TABS = [
-  ['orders', 'Surat perintah kerja', Wrench],
-  ['cutting', 'Daftar potong', Scissors],
-  ['delivery', 'Surat jalan', Truck],
-];
 const CUT_NEXT = { PENDING: ['CUT', 'Tandai selesai potong'], CUT: ['WELDED', 'Tandai selesai las'], WELDED: ['FINISHED', 'Tandai selesai'] };
 
-export default function WorkshopClient({ initialOrders, projects }) {
+export default function WorkshopClient({ tab: activeTab = 'orders', initialOrders, projects }) {
   const router = useRouter();
   const orders = useMemo(() => initialOrders || [], [initialOrders]);
-  const [activeTab, setActiveTab] = useState('orders');
   const [search, setSearch] = useState('');
   const [filterProject, setFilterProject] = useState('ALL');
   const [modal, setModal] = useState(null); // 'order' | 'cutting' | 'delivery'
@@ -127,13 +121,6 @@ export default function WorkshopClient({ initialOrders, projects }) {
       </div>
 
       <div className="card">
-        <div className="tabs" role="tablist">
-          {TABS.map(([key, label, Icon]) => (
-            <button key={key} role="tab" aria-selected={activeTab === key} className={`tab ${activeTab === key ? 'active' : ''}`} onClick={() => setActiveTab(key)}>
-              <Icon aria-hidden /> {label}
-            </button>
-          ))}
-        </div>
         <div className="table-wrapper">
           <table>
             <thead>

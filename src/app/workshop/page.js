@@ -6,6 +6,7 @@ import { redirect } from 'next/navigation';
 import AppLayout from '@/components/AppLayout';
 import { prisma } from '@/lib/prisma';
 import WorkshopClient from './WorkshopClient';
+import { currentTab, tabLabel } from '@/lib/module-tabs';
 
 export const metadata = { title: 'Workshop & Fabrikasi' };
 
@@ -21,6 +22,7 @@ export default async function WorkshopPage({searchParams}) {
   });
   
   const paging=await pageQuery(searchParams);
+  const tab=currentTab('/workshop',(await searchParams)?.tab,session.user.role);
   const total=await prisma.fabricationOrder.count();
   const orders = await prisma.fabricationOrder.findMany({
     skip:paging.skip, take:paging.take,
@@ -33,8 +35,8 @@ export default async function WorkshopPage({searchParams}) {
   });
 
   return (
-    <AppLayout title="Workshop & Fabrikasi" subtitle="Order fabrikasi & pengiriman material" user={session.user}>
-      <WorkshopClient initialOrders={orders} projects={projects} />
-    <ListPager page={paging.page} total={total}/></AppLayout>
+    <AppLayout title="Workshop & Fabrikasi" subtitle={tabLabel('/workshop',tab)} user={session.user}>
+      <WorkshopClient tab={tab} initialOrders={orders} projects={projects} />
+    <ListPager page={paging.page} total={total} query={{tab}}/></AppLayout>
   );
 }

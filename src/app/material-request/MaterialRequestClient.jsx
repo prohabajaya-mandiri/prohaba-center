@@ -3,7 +3,7 @@ import { apiFetch } from '@/lib/client-api';
 
 import { useState } from 'react';
 import { useRouter } from 'next/navigation';
-import { Plus, FileText, Trash2, Eye, Check } from 'lucide-react';
+import { Plus, Trash2, Eye, Check } from 'lucide-react';
 import { useDialog } from '@/components/DialogProvider';
 import { EmptyRow, Modal, StatusBadge } from '@/components/ui';
 import { PRIORITY, fmtDate } from '@/lib/ui-labels';
@@ -12,7 +12,7 @@ const emptyItem = () => ({ description: '', unit: '', quantity: '' });
 
 export default function MaterialRequestClient({ requests, projects, user }) {
   const router = useRouter();
-  const [activeTab, setActiveTab] = useState('list');
+  const [showForm, setShowForm] = useState(false);
   const [selectedProject, setSelectedProject] = useState(projects[0]?.id || '');
   const [items, setItems] = useState([emptyItem()]);
   const [priority, setPriority] = useState('NORMAL');
@@ -43,7 +43,7 @@ export default function MaterialRequestClient({ requests, projects, user }) {
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ projectId: selectedProject, priority, notes, items: validItems }),
       });
-      setActiveTab('list');
+      setShowForm(false);
       setItems([emptyItem()]);
       setNotes('');
       setPriority('NORMAL');
@@ -70,67 +70,83 @@ export default function MaterialRequestClient({ requests, projects, user }) {
     }
   };
 
+  const openForm = () => {
+    setSelectedProject((p) => p || projects[0]?.id || '');
+    setShowForm(true);
+  };
+
   return (
     <div className="stack">
-      <div className="card">
-        <div className="tabs" role="tablist">
-          <button role="tab" aria-selected={activeTab === 'list'} className={`tab ${activeTab === 'list' ? 'active' : ''}`} onClick={() => setActiveTab('list')}>
-            <FileText aria-hidden /> Daftar material request
+      {canCreate && (
+        <div className="toolbar">
+          <p className="muted" style={{ flex: '1 1 300px', fontSize: 14 }}>
+            Ajukan kebutuhan material atau alat dari site. Setelah disetujui, tim logistik membuat purchase order.
+          </p>
+          <button className="btn btn-primary" onClick={openForm} disabled={!projects.length} title={!projects.length ? 'Belum ada proyek aktif' : undefined}>
+            <Plus aria-hidden /> Buat request baru
           </button>
-          {canCreate && (
-            <button role="tab" aria-selected={activeTab === 'create'} className={`tab ${activeTab === 'create' ? 'active' : ''}`} onClick={() => setActiveTab('create')}>
-              <Plus aria-hidden /> Buat request baru
-            </button>
-          )}
         </div>
+      )}
 
-        {activeTab === 'list' && (
-          <div className="table-wrapper">
-            <table>
-              <thead>
-                <tr>
-                  <th>No. MR</th>
-                  <th>Proyek</th>
-                  <th>Pemohon</th>
-                  <th>Prioritas</th>
-                  <th>Status</th>
-                  <th>Tanggal</th>
-                  <th className="num">Aksi</th>
+      <div className="card">
+        <div className="table-wrapper">
+          <table>
+            <thead>
+              <tr>
+                <th>No. MR</th>
+                <th>Proyek</th>
+                <th>Pemohon</th>
+                <th>Prioritas</th>
+                <th>Status</th>
+                <th>Tanggal</th>
+                <th className="num">Aksi</th>
+              </tr>
+            </thead>
+            <tbody>
+              {requests.length === 0 ? (
+                <EmptyRow colSpan={7} title="Belum ada material request" hint={canCreate ? 'Klik "Buat request baru" untuk mengajukan.' : undefined} />
+              ) : requests.map((req) => (
+                <tr key={req.id}>
+                  <td className="cell-title nowrap">{req.mrNumber}</td>
+                  <td>{req.project.code}</td>
+                  <td>{req.requester.name}</td>
+                  <td><StatusBadge value={req.priority} labels={{ [req.priority]: PRIORITY[req.priority]?.[0] }} tones={{ [req.priority]: PRIORITY[req.priority]?.[1] }} /></td>
+                  <td><StatusBadge value={req.status} /></td>
+                  <td className="nowrap">{fmtDate(req.createdAt)}</td>
+                  <td>
+                    <div className="row-actions">
+                      <button className="btn btn-sm btn-outline" onClick={() => setDetail(req)}><Eye aria-hidden /> Detail</button>
+                      {canCreate && req.status === 'SUBMITTED' && (
+                        <button className="btn btn-sm btn-primary" disabled={approving === req.id} onClick={() => approve(req)}><Check aria-hidden /> Setujui</button>
+                      )}
+                    </div>
+                  </td>
                 </tr>
-              </thead>
-              <tbody>
-                {requests.length === 0 ? (
-                  <EmptyRow colSpan={7} title="Belum ada material request" hint={canCreate ? 'Buat request baru dari tab di atas.' : undefined} />
-                ) : requests.map((req) => (
-                  <tr key={req.id}>
-                    <td className="cell-title nowrap">{req.mrNumber}</td>
-                    <td>{req.project.code}</td>
-                    <td>{req.requester.name}</td>
-                    <td><StatusBadge value={req.priority} labels={{ [req.priority]: PRIORITY[req.priority]?.[0] }} tones={{ [req.priority]: PRIORITY[req.priority]?.[1] }} /></td>
-                    <td><StatusBadge value={req.status} /></td>
-                    <td className="nowrap">{fmtDate(req.createdAt)}</td>
-                    <td>
-                      <div className="row-actions">
-                        <button className="btn btn-sm btn-outline" onClick={() => setDetail(req)}><Eye aria-hidden /> Detail</button>
-                        {canCreate && req.status === 'SUBMITTED' && (
-                          <button className="btn btn-sm btn-primary" disabled={approving === req.id} onClick={() => approve(req)}><Check aria-hidden /> Setujui</button>
-                        )}
-                      </div>
-                    </td>
-                  </tr>
-                ))}
-              </tbody>
-            </table>
-          </div>
-        )}
+              ))}
+            </tbody>
+          </table>
+        </div>
+      </div>
 
-        {activeTab === 'create' && (
-          <form className="card-body form-stack" onSubmit={handleSubmit}>
+      {showForm && (
+        <Modal
+          size="modal-lg"
+          title="Buat material request"
+          subtitle="Daftar kebutuhan material atau alat untuk proyek."
+          onClose={() => setShowForm(false)}
+          busy={isSubmitting}
+          footer={
+            <>
+              <button type="button" className="btn btn-outline" onClick={() => setShowForm(false)} disabled={isSubmitting}>Batal</button>
+              <button type="submit" form="mr-form" className="btn btn-primary" disabled={isSubmitting}>{isSubmitting ? 'Mengajukan…' : 'Ajukan material request'}</button>
+            </>
+          }
+        >
+          <form id="mr-form" className="form-stack" onSubmit={handleSubmit}>
             <div className="form-grid">
               <div className="form-group">
                 <label className="form-label required" htmlFor="mr-project">Proyek</label>
                 <select id="mr-project" className="form-select" value={selectedProject} onChange={(e) => setSelectedProject(e.target.value)} required>
-                  {!projects.length && <option value="">Belum ada proyek aktif</option>}
                   {projects.map((p) => <option key={p.id} value={p.id}>{p.code} — {p.name}</option>)}
                 </select>
               </div>
@@ -149,15 +165,15 @@ export default function MaterialRequestClient({ requests, projects, user }) {
                   <thead>
                     <tr>
                       <th>Deskripsi barang</th>
-                      <th style={{ width: 150 }}>Satuan</th>
-                      <th style={{ width: 150 }}>Kuantitas</th>
-                      <th style={{ width: 60 }}><span className="sr-only">Hapus</span></th>
+                      <th style={{ width: 130 }}>Satuan</th>
+                      <th style={{ width: 130 }}>Kuantitas</th>
+                      <th style={{ width: 56 }}><span className="sr-only">Hapus</span></th>
                     </tr>
                   </thead>
                   <tbody>
                     {items.map((item, index) => (
                       <tr key={index}>
-                        <td style={{ padding: '8px 10px', minWidth: 220 }}><input aria-label={`Deskripsi item ${index + 1}`} className="form-input" placeholder="Semen Portland 50 kg" value={item.description} onChange={(e) => updateItem(index, 'description', e.target.value)} /></td>
+                        <td style={{ padding: '8px 10px', minWidth: 200 }}><input aria-label={`Deskripsi item ${index + 1}`} className="form-input" placeholder="Semen Portland 50 kg" value={item.description} onChange={(e) => updateItem(index, 'description', e.target.value)} /></td>
                         <td style={{ padding: '8px 10px' }}><input aria-label={`Satuan item ${index + 1}`} className="form-input" placeholder="Sak" value={item.unit} onChange={(e) => updateItem(index, 'unit', e.target.value)} /></td>
                         <td style={{ padding: '8px 10px' }}><input aria-label={`Kuantitas item ${index + 1}`} type="number" min="0" step="any" className="form-input" placeholder="100" value={item.quantity} onChange={(e) => updateItem(index, 'quantity', e.target.value)} /></td>
                         <td style={{ padding: '8px 6px' }}>
@@ -181,14 +197,9 @@ export default function MaterialRequestClient({ requests, projects, user }) {
               <label className="form-label" htmlFor="mr-notes">Catatan untuk tim logistik</label>
               <textarea id="mr-notes" className="form-input" rows="3" value={notes} onChange={(e) => setNotes(e.target.value)} />
             </div>
-
-            <div className="form-actions">
-              <button type="button" className="btn btn-outline" onClick={() => setActiveTab('list')}>Batal</button>
-              <button type="submit" className="btn btn-primary" disabled={isSubmitting}>{isSubmitting ? 'Mengajukan…' : 'Ajukan material request'}</button>
-            </div>
           </form>
-        )}
-      </div>
+        </Modal>
+      )}
 
       {detail && (
         <Modal

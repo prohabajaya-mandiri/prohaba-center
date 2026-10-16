@@ -3,29 +3,40 @@ import { apiFetch, businessToday } from '@/lib/client-api';
 
 import { useState } from 'react';
 import { useRouter } from 'next/navigation';
-import { ShoppingCart, Plus, FileText, Info, Eye, PackageCheck } from 'lucide-react';
+import { ShoppingCart, Plus, Info, Eye, PackageCheck } from 'lucide-react';
 import { useDialog } from '@/components/DialogProvider';
 import { EmptyRow, Modal, StatusBadge } from '@/components/ui';
 import { idr, fmtDate } from '@/lib/ui-labels';
+
+const itemsOf = (mr) => (mr ? mr.items.map((item) => ({ ...item, unitPrice: 0 })) : []);
 
 export default function ProcurementClient({ purchaseOrders, materialRequests, vendors, user }) {
   const router = useRouter();
   const [receipt, setReceipt] = useState(null);
   const [receiptError, setReceiptError] = useState('');
   const [detail, setDetail] = useState(null);
-  const [activeTab, setActiveTab] = useState('list');
-  const [selectedMR, setSelectedMR] = useState(materialRequests[0] || null);
+  const [showForm, setShowForm] = useState(false);
+  const [selectedMR, setSelectedMR] = useState(null);
   const [selectedVendor, setSelectedVendor] = useState('');
   const [deliveryNotes, setDeliveryNotes] = useState('');
-  const [poItems, setPoItems] = useState(materialRequests[0] ? materialRequests[0].items.map((item) => ({ ...item, unitPrice: 0 })) : []);
+  const [poItems, setPoItems] = useState([]);
   const [isSubmitting, setIsSubmitting] = useState(false);
   const { showAlert } = useDialog();
   const canManage = ['TOP_MANAGEMENT', 'LOGISTIK'].includes(user.role);
 
+  const openForm = () => {
+    const first = materialRequests[0] ?? null;
+    setSelectedMR(first);
+    setPoItems(itemsOf(first));
+    setSelectedVendor('');
+    setDeliveryNotes('');
+    setShowForm(true);
+  };
+
   const handleMRChange = (mrId) => {
-    const mr = materialRequests.find((m) => m.id === mrId);
-    setSelectedMR(mr ?? null);
-    setPoItems(mr ? mr.items.map((item) => ({ ...item, unitPrice: 0 })) : []);
+    const mr = materialRequests.find((m) => m.id === mrId) ?? null;
+    setSelectedMR(mr);
+    setPoItems(itemsOf(mr));
   };
 
   const handlePriceChange = (index, price) => {
@@ -34,7 +45,8 @@ export default function ProcurementClient({ purchaseOrders, materialRequests, ve
 
   const total = poItems.reduce((s, i) => s + i.quantity * i.unitPrice, 0);
 
-  const handleSubmit = async () => {
+  const handleSubmit = async (e) => {
+    e.preventDefault();
     if (!selectedMR || !selectedVendor) {
       await showAlert('Pilih material request dan vendor terlebih dahulu.', 'Peringatan');
       return;
@@ -55,11 +67,7 @@ export default function ProcurementClient({ purchaseOrders, materialRequests, ve
           items: poItems.map((item) => ({ mrItemId: item.id, unitPrice: item.unitPrice })),
         }),
       });
-      setActiveTab('list');
-      setSelectedMR(null);
-      setSelectedVendor('');
-      setDeliveryNotes('');
-      setPoItems([]);
+      setShowForm(false);
       router.refresh();
       await showAlert('Purchase order berhasil diterbitkan.', 'Berhasil');
     } catch (error) {
@@ -94,83 +102,97 @@ export default function ProcurementClient({ purchaseOrders, materialRequests, ve
 
   return (
     <div className="stack">
-      <div className="card">
-        <div className="tabs" role="tablist">
-          <button role="tab" aria-selected={activeTab === 'list'} className={`tab ${activeTab === 'list' ? 'active' : ''}`} onClick={() => setActiveTab('list')}>
-            <FileText aria-hidden /> Daftar purchase order
+      {canManage && (
+        <div className="toolbar">
+          <p className="muted" style={{ flex: '1 1 300px', fontSize: 14 }}>
+            Terbitkan purchase order dari material request yang sudah disetujui, lalu catat penerimaan barangnya.
+          </p>
+          <button
+            className="btn btn-primary"
+            onClick={openForm}
+            disabled={!materialRequests.length}
+            title={!materialRequests.length ? 'Belum ada material request yang disetujui' : undefined}
+          >
+            <Plus aria-hidden /> Buat PO dari MR
           </button>
-          {canManage && (
-            <button role="tab" aria-selected={activeTab === 'create'} className={`tab ${activeTab === 'create' ? 'active' : ''}`} onClick={() => setActiveTab('create')}>
-              <Plus aria-hidden /> Buat PO dari MR
-            </button>
-          )}
         </div>
+      )}
 
-        {activeTab === 'list' && (
-          <div className="table-wrapper">
-            <table>
-              <thead>
-                <tr>
-                  <th>No. PO</th>
-                  <th>Proyek</th>
-                  <th>Vendor</th>
-                  <th className="num">Total nilai</th>
-                  <th>Status</th>
-                  <th>Ref. MR</th>
-                  <th>Tanggal</th>
-                  <th className="num">Aksi</th>
+      <div className="card">
+        <div className="table-wrapper">
+          <table>
+            <thead>
+              <tr>
+                <th>No. PO</th>
+                <th>Proyek</th>
+                <th>Vendor</th>
+                <th className="num">Total nilai</th>
+                <th>Status</th>
+                <th>Ref. MR</th>
+                <th>Tanggal</th>
+                <th className="num">Aksi</th>
+              </tr>
+            </thead>
+            <tbody>
+              {purchaseOrders.length === 0 ? (
+                <EmptyRow colSpan={8} title="Belum ada purchase order" hint={canManage ? 'Klik "Buat PO dari MR" untuk menerbitkan.' : undefined} />
+              ) : purchaseOrders.map((po) => (
+                <tr key={po.id}>
+                  <td className="cell-title nowrap">{po.poNumber}</td>
+                  <td>{po.project.code}</td>
+                  <td>{po.vendor.name}</td>
+                  <td className="num" style={{ fontWeight: 600, color: 'var(--gray-900)' }}>{idr(po.totalAmount)}</td>
+                  <td><StatusBadge value={po.status} /></td>
+                  <td>{po.mr?.mrNumber || '-'}</td>
+                  <td className="nowrap">{fmtDate(po.createdAt)}</td>
+                  <td>
+                    <div className="row-actions">
+                      <button className="btn btn-sm btn-outline" onClick={() => setDetail(po)}><Eye aria-hidden /> Detail</button>
+                      {canManage && ['CREATED', 'SENT', 'CONFIRMED', 'PARTIAL'].includes(po.status) && (
+                        <button className="btn btn-sm btn-primary" onClick={() => { setReceipt(po); setReceiptError(''); }}>
+                          <PackageCheck aria-hidden /> Terima barang
+                        </button>
+                      )}
+                    </div>
+                  </td>
                 </tr>
-              </thead>
-              <tbody>
-                {purchaseOrders.length === 0 ? (
-                  <EmptyRow colSpan={8} title="Belum ada purchase order" />
-                ) : purchaseOrders.map((po) => (
-                  <tr key={po.id}>
-                    <td className="cell-title nowrap">{po.poNumber}</td>
-                    <td>{po.project.code}</td>
-                    <td>{po.vendor.name}</td>
-                    <td className="num" style={{ fontWeight: 600, color: 'var(--gray-900)' }}>{idr(po.totalAmount)}</td>
-                    <td><StatusBadge value={po.status} /></td>
-                    <td>{po.mr?.mrNumber || '-'}</td>
-                    <td className="nowrap">{fmtDate(po.createdAt)}</td>
-                    <td>
-                      <div className="row-actions">
-                        <button className="btn btn-sm btn-outline" onClick={() => setDetail(po)}><Eye aria-hidden /> Detail</button>
-                        {canManage && ['CREATED', 'SENT', 'CONFIRMED', 'PARTIAL'].includes(po.status) && (
-                          <button className="btn btn-sm btn-primary" onClick={() => { setReceipt(po); setReceiptError(''); }}>
-                            <PackageCheck aria-hidden /> Terima barang
-                          </button>
-                        )}
-                      </div>
-                    </td>
-                  </tr>
-                ))}
-              </tbody>
-            </table>
-          </div>
-        )}
+              ))}
+            </tbody>
+          </table>
+        </div>
+      </div>
 
-        {activeTab === 'create' && (
-          <div className="card-body form-stack">
-            <div className="alert alert-info">
-              <Info aria-hidden />
-              Pilih material request yang sudah disetujui untuk dijadikan purchase order.
-            </div>
-
+      {showForm && (
+        <Modal
+          size="modal-lg"
+          title="Buat purchase order"
+          subtitle="Pilih material request yang sudah disetujui, vendor, dan harga per item."
+          onClose={() => setShowForm(false)}
+          busy={isSubmitting}
+          footer={
+            <>
+              <button type="button" className="btn btn-outline" onClick={() => setShowForm(false)} disabled={isSubmitting}>Batal</button>
+              <button type="submit" form="po-form" className="btn btn-primary" disabled={!selectedMR || isSubmitting}>
+                <ShoppingCart aria-hidden /> {isSubmitting ? 'Menerbitkan…' : 'Terbitkan PO'}
+              </button>
+            </>
+          }
+        >
+          <form id="po-form" className="form-stack" onSubmit={handleSubmit}>
             <div className="form-grid">
               <div className="form-group">
                 <label className="form-label required" htmlFor="po-mr">Sumber material request</label>
-                <select id="po-mr" className="form-select" value={selectedMR?.id || ''} onChange={(e) => handleMRChange(e.target.value)}>
-                  {materialRequests.length === 0 && <option value="">Tidak ada MR yang siap diproses</option>}
+                <select id="po-mr" className="form-select" value={selectedMR?.id || ''} onChange={(e) => handleMRChange(e.target.value)} required>
                   {materialRequests.map((mr) => <option key={mr.id} value={mr.id}>{mr.mrNumber} — {mr.project.code}</option>)}
                 </select>
               </div>
               <div className="form-group">
                 <label className="form-label required" htmlFor="po-vendor">Vendor</label>
-                <select id="po-vendor" className="form-select" value={selectedVendor} onChange={(e) => setSelectedVendor(e.target.value)}>
+                <select id="po-vendor" className="form-select" value={selectedVendor} onChange={(e) => setSelectedVendor(e.target.value)} required>
                   <option value="">Pilih vendor</option>
                   {vendors.map((v) => <option key={v.id} value={v.id}>{v.name} ({v.code})</option>)}
                 </select>
+                {!vendors.length && <div className="form-hint">Belum ada vendor aktif. Tambahkan di Master Data → Pemasok.</div>}
               </div>
             </div>
 
@@ -195,7 +217,7 @@ export default function ProcurementClient({ purchaseOrders, materialRequests, ve
                           <td>{item.unit}</td>
                           <td className="num">{Number(item.quantity).toLocaleString('id-ID')}</td>
                           <td style={{ padding: '8px 10px' }}>
-                            <input type="number" min="0" className="form-input" aria-label={`Harga satuan ${item.description}`} style={{ width: 170 }} value={item.unitPrice || ''} onChange={(e) => handlePriceChange(index, e.target.value)} />
+                            <input type="number" min="0" className="form-input" aria-label={`Harga satuan ${item.description}`} style={{ width: 160 }} value={item.unitPrice || ''} onChange={(e) => handlePriceChange(index, e.target.value)} />
                           </td>
                           <td className="num" style={{ fontWeight: 600 }}>{idr(item.quantity * item.unitPrice)}</td>
                         </tr>
@@ -215,15 +237,10 @@ export default function ProcurementClient({ purchaseOrders, materialRequests, ve
               <textarea id="po-notes" className="form-input" rows="3" value={deliveryNotes} onChange={(e) => setDeliveryNotes(e.target.value)} />
             </div>
 
-            <div className="form-actions">
-              <button className="btn btn-outline" onClick={() => setActiveTab('list')}>Batal</button>
-              <button className="btn btn-primary" onClick={handleSubmit} disabled={!selectedMR || isSubmitting}>
-                <ShoppingCart aria-hidden /> {isSubmitting ? 'Menerbitkan…' : 'Terbitkan PO'}
-              </button>
-            </div>
-          </div>
-        )}
-      </div>
+            <p className="alert alert-info"><Info aria-hidden /> Nilai PO dihitung dari kuantitas material request dikali harga satuan.</p>
+          </form>
+        </Modal>
+      )}
 
       {detail && (
         <Modal

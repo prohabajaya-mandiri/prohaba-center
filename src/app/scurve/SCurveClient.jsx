@@ -2,6 +2,7 @@
 import { apiFetch, businessToday } from '@/lib/client-api';
 
 import { useState, useEffect, useCallback, useRef, useMemo } from 'react';
+import { useRouter } from 'next/navigation';
 import { useDialog } from '@/components/DialogProvider';
 import { Modal } from '@/components/ui';
 import {
@@ -9,8 +10,8 @@ import {
   ResponsiveContainer, ReferenceLine, Area, ComposedChart,
 } from 'recharts';
 import {
-  Plus, Upload, FileSpreadsheet, Calendar, BarChart2, Table2,
-  CheckCircle, Save, RefreshCw, Edit, Trash2, Loader2, Info, Activity,
+  Plus, Upload, FileSpreadsheet, Calendar,
+  CheckCircle, Save, RefreshCw, Edit, Trash2, Loader2, Info,
 } from 'lucide-react';
 
 // ─── Helpers ────────────────────────────────────────────────────────────────
@@ -64,14 +65,6 @@ const CustomTooltip = ({ active, payload, label }) => {
   );
 };
 
-const TABS = [
-  { id: 'scurve', label: 'Kurva S', icon: Activity },
-  { id: 'boq', label: 'Upload BOQ', icon: Upload },
-  { id: 'schedule', label: 'Jadwal item', icon: Calendar },
-  { id: 'actual', label: 'Input realisasi', icon: Table2 },
-  { id: 'report', label: 'Laporan', icon: BarChart2 },
-];
-
 function NeedBoq({ onGo }) {
   return (
     <div className="empty-state">
@@ -84,10 +77,12 @@ function NeedBoq({ onGo }) {
 }
 
 // ─── Main Component ─────────────────────────────────────────────────────────
-export default function SCurveClient({ projects, user }) {
+export default function SCurveClient({ tab: activeTab = 'scurve', projects, user }) {
+  const router = useRouter();
+  // Sub-menu dipilih lewat URL agar sinkron dengan sidebar.
+  const setActiveTab = (key) => router.push(`/scurve?tab=${key}`, { scroll: false });
   const readOnly = !['TOP_MANAGEMENT', 'ENGINEERING', 'PJO'].includes(user?.role);
   const [selectedProjectId, setSelectedProjectId] = useState(projects?.[0]?.id || '');
-  const [activeTab, setActiveTab] = useState('scurve');
   const [data, setData] = useState(null);
   const [loading, setLoading] = useState(false);
   const [uploading, setUploading] = useState(false);
@@ -332,16 +327,6 @@ export default function SCurveClient({ projects, user }) {
       )}
 
       <div className="card">
-        <div className="tabs" role="tablist">
-          {TABS.map((tab) => {
-            const Icon = tab.icon;
-            return (
-              <button key={tab.id} role="tab" aria-selected={activeTab === tab.id} className={`tab ${activeTab === tab.id ? 'active' : ''}`} onClick={() => setActiveTab(tab.id)}>
-                <Icon aria-hidden /> {tab.label}
-              </button>
-            );
-          })}
-        </div>
 
         {message && (
           <div className={`alert ${message.type === 'success' ? 'alert-success' : 'alert-danger'}`} style={{ margin: '16px 20px 0' }}>

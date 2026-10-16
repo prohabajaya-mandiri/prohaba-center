@@ -5,6 +5,7 @@ import { listMaster, masterRoles } from "@/lib/services/master";
 import { pagination } from "@/lib/validation";
 import AppLayout from "@/components/AppLayout";
 import MasterClient from "./MasterClient";
+import { tabLabel } from "@/lib/module-tabs";
 
 export const metadata = { title: 'Master Data' };
 export default async function MasterPage({ searchParams }) {
@@ -42,7 +43,7 @@ export default async function MasterPage({ searchParams }) {
     <AppLayout
       user={session.user}
       title="Master Data"
-      subtitle="Pegawai, tarif, pemasok, harga referensi, dan mapping akun"
+      subtitle={tabLabel("/master-data", resource)}
     >
       <MasterClient
         key={resource}

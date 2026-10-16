@@ -10,13 +10,9 @@ import {
   ensure,
 } from "../validation.js";
 import { STANDARD_ACCOUNTS } from "./ledger.js";
-export const masterRoles = {
-  employees: ["TOP_MANAGEMENT", "HRD"],
-  assignments: ["TOP_MANAGEMENT", "HRD"],
-  vendors: ["TOP_MANAGEMENT", "LOGISTIK", "FINANCE"],
-  prices: ["TOP_MANAGEMENT", "LOGISTIK", "FINANCE"],
-  accounts: ["TOP_MANAGEMENT", "FINANCE"],
-};
+import { MASTER_ROLES } from "../module-tabs.js";
+// Satu sumber aturan dengan sub-menu Master Data di sidebar.
+export const masterRoles = MASTER_ROLES;
 const models = {
   employees: "employee",
   assignments: "employeeProject",

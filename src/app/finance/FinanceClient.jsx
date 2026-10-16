@@ -9,14 +9,8 @@ import { EmptyRow, StatusBadge } from "@/components/ui";
 import { idr, fmtDate } from "@/lib/ui-labels";
 import { useDialog } from "@/components/DialogProvider";
 
-const TABS = [
-  ["hutang", "Hutang usaha"],
-  ["faktur", "Faktur pembelian baru"],
-  ["buku", "Buku besar"],
-  ["laba", "Laba proyek"],
-];
-
 export default function FinanceClient({
+  tab = "hutang",
   glAccounts,
   profitData,
   summary,
@@ -27,7 +21,6 @@ export default function FinanceClient({
 }) {
   const router = useRouter(),
     { showAlert } = useDialog(),
-    [tab, setTab] = useState("hutang"),
     [payment, setPayment] = useState(null),
     [poId, setPoId] = useState(""),
     [error, setError] = useState(""),
@@ -57,8 +50,7 @@ export default function FinanceClient({
       });
       form.reset();
       setPoId("");
-      router.refresh();
-      setTab("hutang");
+      router.push("/finance?tab=hutang");
       await showAlert("Faktur pembelian tersimpan dan jurnal sudah dibuat.", "Berhasil");
     } catch (e) {
       setError(e.message);
@@ -91,13 +83,6 @@ export default function FinanceClient({
       </div>
 
       <div className="card">
-        <nav className="tabs" role="tablist">
-          {TABS.map(([key, label]) => (
-            <button key={key} role="tab" aria-selected={tab === key} className={"tab " + (tab === key ? "active" : "")} onClick={() => setTab(key)}>
-              {label}
-            </button>
-          ))}
-        </nav>
 
         {tab === "hutang" && (
           <div className="table-wrapper">

@@ -2,7 +2,6 @@
 import { apiFetch } from "@/lib/client-api";
 import { useState } from "react";
 import { useRouter } from "next/navigation";
-import Link from "next/link";
 import { Plus, Pencil, Info } from "lucide-react";
 import { EmptyRow, Modal } from "@/components/ui";
 import ListPager from "@/components/ListPager";
@@ -106,7 +105,6 @@ const humanize = (v) =>
 
 export default function MasterClient({
   resource,
-  resources,
   result,
   projects,
   employees,
@@ -183,19 +181,6 @@ export default function MasterClient({
   return (
     <div className="stack">
       <div className="card">
-        <nav className="tabs" aria-label="Jenis master data">
-          {resources.map((key) => (
-            <Link
-              key={key}
-              href={"/master-data?resource=" + key}
-              className={"tab " + (key === resource ? "active" : "")}
-              aria-current={key === resource ? "page" : undefined}
-              style={{ textDecoration: "none" }}
-            >
-              {LABELS[key]}
-            </Link>
-          ))}
-        </nav>
 
         <div className="toolbar" style={{ padding: "16px 20px", borderBottom: "1px solid var(--gray-200)" }}>
           <div style={{ flex: "1 1 320px" }}>

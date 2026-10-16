@@ -9,9 +9,8 @@ import MonitoringClient from './MonitoringClient';
 import { EmptyRow, Modal, StatusBadge } from '@/components/ui';
 import { MAINTENANCE_TYPE, VEHICLE_TYPE, fmtDate } from '@/lib/ui-labels';
 
-export default function LogistikClient({ user, vehicles, fuelLogs, maintenanceLogs, projects }) {
+export default function LogistikClient({ tab: activeTab = 'fuel', user, vehicles, fuelLogs, maintenanceLogs, projects }) {
   const router = useRouter();
-  const [activeTab, setActiveTab] = useState('fuel');
   
   // Add Vehicle State
   const [isVehicleModalOpen, setIsVehicleModalOpen] = useState(false);
@@ -169,25 +168,9 @@ export default function LogistikClient({ user, vehicles, fuelLogs, maintenanceLo
 
   return (
     <div className="stack">
-      <p className="muted" style={{ fontSize: 14 }}>Ringkasan pemakaian dan deteksi anomali dihitung dari riwayat yang tampil di halaman ini (50 catatan per jenis).</p>
-      <div className="tabs">
-        <button className={`tab ${activeTab === 'fuel' ? 'active' : ''}`} onClick={() => setActiveTab('fuel')}>
-          <Droplet size={16} />
-          Penggunaan BBM
-        </button>
-        <button className={`tab ${activeTab === 'maintenance' ? 'active' : ''}`} onClick={() => setActiveTab('maintenance')}>
-          <Wrench size={16} />
-          Perawatan & Servis
-        </button>
-        <button className={`tab ${activeTab === 'vehicles' ? 'active' : ''}`} onClick={() => setActiveTab('vehicles')}>
-          <Truck size={16} />
-          Data Kendaraan & Alat Berat
-        </button>
-        <button className={`tab ${activeTab === 'monitoring' ? 'active' : ''}`} onClick={() => setActiveTab('monitoring')}>
-          <BarChart2 size={16} />
-          Monitoring per Kendaraan
-        </button>
-      </div>
+      {activeTab === 'monitoring' && (
+        <p className="muted" style={{ fontSize: 14 }}>Ringkasan pemakaian dan deteksi anomali dihitung dari 50 catatan BBM dan servis terbaru.</p>
+      )}
 
       {activeTab === 'fuel' && (
         <div style={{ display: 'flex', flexDirection: 'column', gap: '24px' }}>
@@ -255,7 +238,7 @@ export default function LogistikClient({ user, vehicles, fuelLogs, maintenanceLo
           <div className="card" style={{ marginTop: '4px' }}>
             <div className="card-header" style={{ borderBottom: '1px solid var(--gray-100)', paddingBottom: '16px' }}>
               <div className="card-title">Riwayat Pemakaian BBM</div>
-              <span style={{ fontSize: '12px', color: 'var(--gray-500)' }}>10 entri terakhir dari semua kendaraan</span>
+              <span className="card-subtitle">Semua kendaraan, terbaru di atas</span>
             </div>
             <div className="table-wrapper">
               <table>
@@ -272,7 +255,7 @@ export default function LogistikClient({ user, vehicles, fuelLogs, maintenanceLo
                   {fuelLogs.length === 0 ? (
                     <EmptyRow colSpan={5} title="Belum ada riwayat BBM" />
                   ) : (
-                    fuelLogs.slice(0, 10).map(log => (
+                    fuelLogs.map(log => (
                       <tr key={log.id}>
                         <td className="nowrap">{fmtDate(log.date)}</td>
                         <td><div className="cell-title">{log.vehicle.name}</div><div className="cell-sub">{log.vehicle.code || log.vehicle.plateNumber || '-'}</div></td>
@@ -378,7 +361,7 @@ export default function LogistikClient({ user, vehicles, fuelLogs, maintenanceLo
           <div className="card" style={{ marginTop: '4px' }}>
             <div className="card-header" style={{ borderBottom: '1px solid var(--gray-100)' }}>
               <div className="card-title">Riwayat Perawatan</div>
-              <span style={{ fontSize: '12px', color: 'var(--gray-500)' }}>10 entri terakhir dari semua kendaraan</span>
+              <span className="card-subtitle">Semua kendaraan, terbaru di atas</span>
             </div>
             <div className="table-wrapper">
               <table>
@@ -395,7 +378,7 @@ export default function LogistikClient({ user, vehicles, fuelLogs, maintenanceLo
                   {maintenanceLogs.length === 0 ? (
                     <EmptyRow colSpan={5} title="Belum ada riwayat servis" />
                   ) : (
-                    maintenanceLogs.slice(0, 10).map(log => (
+                    maintenanceLogs.map(log => (
                       <tr key={log.id}>
                         <td className="nowrap">{fmtDate(log.date)}</td>
                         <td><div className="cell-title">{log.vehicle.name}</div><div className="cell-sub">{log.vehicle.code || log.vehicle.plateNumber || '-'}</div></td>
