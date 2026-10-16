@@ -3,6 +3,9 @@ import { apiFetch } from "@/lib/client-api";
 import { useState } from "react";
 import { useRouter } from "next/navigation";
 import Link from "next/link";
+import { Plus, Pencil, Info } from "lucide-react";
+import { EmptyRow, Modal } from "@/components/ui";
+import ListPager from "@/components/ListPager";
 
 const TYPES = [
   "KAS_BANK",
@@ -81,7 +84,7 @@ const FIELDS = {
   ],
 };
 for (const resource of ["employees", "vendors", "accounts"])
-  FIELDS[resource].push(["isActive", "Aktif", ["true", "false"]]);
+  FIELDS[resource].push(["isActive", "Status", ["true", "false"]]);
 const LABELS = {
   employees: "Pegawai",
   assignments: "Penugasan & tarif",
@@ -89,6 +92,18 @@ const LABELS = {
   prices: "Referensi harga",
   accounts: "Akun buku besar",
 };
+const OPTION_LABEL = {
+  STAFF: "Staff",
+  HARIAN: "Harian",
+  BORONGAN: "Borongan",
+  DAILY: "Harian",
+  MONTHLY: "Bulanan",
+  true: "Aktif",
+  false: "Nonaktif",
+};
+const humanize = (v) =>
+  v === null || v === undefined || v === "" ? "—" : OPTION_LABEL[v] ?? String(v).replaceAll("_", " ");
+
 export default function MasterClient({
   resource,
   resources,
@@ -102,6 +117,9 @@ export default function MasterClient({
     [error, setError] = useState(""),
     [busy, setBusy] = useState(false);
   const router = useRouter();
+  const hasStatus = FIELDS[resource].some(([k]) => k === "isActive");
+  const columns = FIELDS[resource].slice(0, 4);
+
   async function save(event) {
     event.preventDefault();
     setBusy(true);
@@ -116,7 +134,7 @@ export default function MasterClient({
         )
           delete body[key];
       if (body.isActive !== undefined) body.isActive = body.isActive === "true";
-      const response = await apiFetch(
+      await apiFetch(
         "/api/master/" + resource + (editing ? "/" + editing.id : ""),
         {
           method: editing ? "PUT" : "POST",
@@ -124,8 +142,6 @@ export default function MasterClient({
           body: JSON.stringify(body),
         },
       );
-      const data = await response.json();
-      if (!response.ok) throw new Error(data.error);
       setOpen(false);
       setEditing(null);
       router.refresh();
@@ -135,13 +151,12 @@ export default function MasterClient({
       setBusy(false);
     }
   }
+
   async function initialize() {
     setBusy(true);
     setError("");
     try {
-      const r = await apiFetch("/api/master/bootstrap", { method: "POST" });
-      const d = await r.json();
-      if (!r.ok) throw new Error(d.error);
+      await apiFetch("/api/master/bootstrap", { method: "POST" });
       router.refresh();
     } catch (e) {
       setError(e.message);
@@ -149,195 +164,185 @@ export default function MasterClient({
       setBusy(false);
     }
   }
+
+  const openForm = (row) => {
+    setEditing(row);
+    setError("");
+    setOpen(true);
+  };
+
+  const cell = (row, key, type) => {
+    if (key === "employeeId") return row.employee?.name ?? "—";
+    if (key === "projectId") return row.project?.code ?? "—";
+    if (type?.startsWith?.("date") && row[key])
+      return new Date(row[key]).toLocaleDateString("id-ID", { day: "numeric", month: "short", year: "numeric" });
+    if (type?.startsWith?.("number") && row[key] != null) return Number(row[key]).toLocaleString("id-ID");
+    return humanize(row[key]);
+  };
+
   return (
-    <div className="card" style={{ padding: 24 }}>
-      <nav
-        style={{ display: "flex", gap: 12, flexWrap: "wrap", marginBottom: 20 }}
-      >
-        {resources.map((key) => (
-          <Link
-            className="btn btn-outline"
-            key={key}
-            href={"/master-data?resource=" + key}
-          >
-            {LABELS[key]}
-          </Link>
-        ))}
-      </nav>
-      <h2>{LABELS[resource]}</h2>
-      {resource === "assignments" && (
-        <p>
-          Tarif adalah alokasi untuk proyek ini. Bulanan memerlukan penugasan
-          satu periode penuh; untuk periode parsial gunakan tarif harian. Tarif
-          lembur harus diisi, termasuk 0 bila tidak berlaku.
-        </p>
-      )}
-      {resource === "accounts" && (
-        <p>
-          Saldo awal diisi sebelum pencatatan jurnal. Saldo berjalan dihitung
-          dari saldo awal dan seluruh jurnal.
-        </p>
-      )}
-      {error && (
-        <p role="alert" className="alert alert-danger">
-          {error}
-        </p>
-      )}
-      <div style={{ display: "flex", gap: 12, margin: "16px 0" }}>
-        <button
-          className="btn btn-primary"
-          onClick={() => {
-            setEditing(null);
-            setOpen(true);
-          }}
-        >
-          Tambah
-        </button>
-        {resource === "accounts" && (
-          <button
-            className="btn btn-outline"
-            disabled={busy}
-            onClick={initialize}
-          >
-            Siapkan mapping akun standar
-          </button>
-        )}
-      </div>
-      {open && (
-        <form
-          onSubmit={save}
-          key={editing?.id ?? "new"}
-          style={{
-            padding: 16,
-            border: "1px solid #ddd",
-            display: "grid",
-            gridTemplateColumns: "repeat(auto-fit,minmax(220px,1fr))",
-            gap: 12,
-          }}
-        >
-          {FIELDS[resource].map(([key, label, type]) => {
-            const options =
-              type === "projects"
-                ? projects.map((i) => [i.id, i.code + " — " + i.name])
-                : type === "employees"
-                  ? employees.map((i) => [i.id, i.name])
-                  : Array.isArray(type)
-                    ? type.map((i) => [i, i || "Tanpa mapping"])
-                    : null;
-            const raw = editing?.[key],
-              value =
-                typeof type === "string" && type.startsWith("date") && raw
-                  ? new Date(raw).toISOString().slice(0, 10)
-                  : raw === false
-                    ? "false"
-                    : raw === true
-                      ? "true"
-                      : (raw ?? "");
-            return (
-              <label key={key}>
-                {label}
-                {options ? (
-                  <select
-                    name={key}
-                    className="form-select"
-                    defaultValue={value}
-                    required={key !== "purpose"}
-                  >
-                    <option value="">Pilih</option>
-                    {options.map(([v, l]) => (
-                      <option value={v} key={v}>
-                        {l}
-                      </option>
-                    ))}
-                  </select>
-                ) : (
-                  <input
-                    name={key}
-                    className="form-input"
-                    defaultValue={value}
-                    type={
-                      type?.startsWith?.("number")
-                        ? "number"
-                        : type?.startsWith?.("date")
-                          ? "date"
-                          : "text"
-                    }
-                    step={type?.startsWith?.("number") ? "0.01" : undefined}
-                    required={!type?.endsWith?.("optional")}
-                    maxLength={500}
-                  />
-                )}
-              </label>
-            );
-          })}
-          <div>
-            <button className="btn btn-primary" disabled={busy}>
-              {busy ? "Menyimpan…" : "Simpan"}
-            </button>{" "}
-            <button
-              type="button"
-              className="btn btn-outline"
-              onClick={() => setOpen(false)}
+    <div className="stack">
+      <div className="card">
+        <nav className="tabs" aria-label="Jenis master data">
+          {resources.map((key) => (
+            <Link
+              key={key}
+              href={"/master-data?resource=" + key}
+              className={"tab " + (key === resource ? "active" : "")}
+              aria-current={key === resource ? "page" : undefined}
+              style={{ textDecoration: "none" }}
             >
-              Batal
-            </button>
+              {LABELS[key]}
+            </Link>
+          ))}
+        </nav>
+
+        <div className="toolbar" style={{ padding: "16px 20px", borderBottom: "1px solid var(--gray-200)" }}>
+          <div style={{ flex: "1 1 320px" }}>
+            <h2 style={{ fontSize: 17 }}>{LABELS[resource]}</h2>
+            {resource === "assignments" && (
+              <p className="muted" style={{ fontSize: 14, marginTop: 2 }}>
+                Tarif adalah alokasi untuk proyek ini. Bulanan memerlukan penugasan satu periode penuh; untuk periode parsial
+                gunakan tarif harian. Tarif lembur wajib diisi, termasuk 0 bila tidak berlaku.
+              </p>
+            )}
+            {resource === "accounts" && (
+              <p className="muted" style={{ fontSize: 14, marginTop: 2 }}>
+                Saldo awal diisi sebelum pencatatan jurnal. Saldo berjalan dihitung dari saldo awal dan seluruh jurnal.
+              </p>
+            )}
           </div>
-        </form>
-      )}
-      <div className="table-wrapper">
-        <table>
-          <thead>
-            <tr>
-              {FIELDS[resource].slice(0, 4).map(([key, label]) => (
-                <th key={key}>{label}</th>
-              ))}
-              <th>Aksi</th>
-            </tr>
-          </thead>
-          <tbody>
-            {result.rows.map((row) => (
-              <tr key={row.id}>
-                {FIELDS[resource].slice(0, 4).map(([key]) => (
-                  <td key={key}>
-                    {key === "employeeId"
-                      ? row.employee?.name
-                      : key === "projectId"
-                        ? row.project?.code
-                        : String(row[key] ?? "—")}
-                  </td>
+          {resource === "accounts" && (
+            <button className="btn btn-outline" disabled={busy} onClick={initialize}>
+              Siapkan mapping akun standar
+            </button>
+          )}
+          <button className="btn btn-primary" onClick={() => openForm(null)}>
+            <Plus aria-hidden /> Tambah
+          </button>
+        </div>
+
+        {error && !open && (
+          <p role="alert" className="alert alert-danger" style={{ margin: "16px 20px 0" }}>
+            {error}
+          </p>
+        )}
+
+        <div className="table-wrapper">
+          <table>
+            <thead>
+              <tr>
+                {columns.map(([key, label, type]) => (
+                  <th key={key} className={type?.startsWith?.("number") ? "num" : undefined}>{label}</th>
                 ))}
-                <td>
-                  <button
-                    className="btn btn-outline"
-                    onClick={() => {
-                      setEditing(row);
-                      setOpen(true);
-                      setError("");
-                    }}
-                  >
-                    Ubah
-                  </button>
-                </td>
+                {hasStatus && <th>Status</th>}
+                <th className="num">Aksi</th>
               </tr>
-            ))}
-          </tbody>
-        </table>
+            </thead>
+            <tbody>
+              {result.rows.map((row) => (
+                <tr key={row.id}>
+                  {columns.map(([key, , type], i) => (
+                    <td key={key} className={i === 0 ? "cell-title" : type?.startsWith?.("number") ? "num" : undefined}>
+                      {cell(row, key, type)}
+                    </td>
+                  ))}
+                  {hasStatus && (
+                    <td>{row.isActive ? <span className="badge badge-success">Aktif</span> : <span className="badge badge-gray">Nonaktif</span>}</td>
+                  )}
+                  <td className="num">
+                    <button className="btn btn-outline btn-sm" onClick={() => openForm(row)}>
+                      <Pencil aria-hidden /> Ubah
+                    </button>
+                  </td>
+                </tr>
+              ))}
+              {!result.rows.length && (
+                <EmptyRow
+                  colSpan={columns.length + (hasStatus ? 2 : 1)}
+                  title={`Belum ada data ${LABELS[resource].toLowerCase()}`}
+                  hint="Klik Tambah untuk menambahkan."
+                />
+              )}
+            </tbody>
+          </table>
+        </div>
       </div>
-      <div style={{ display: "flex", gap: 16, marginTop: 16 }}>
-        {page > 1 && (
-          <Link href={"?resource=" + resource + "&page=" + (page - 1)}>
-            Sebelumnya
-          </Link>
-        )}
-        <span>
-          Halaman {page} · {result.total} data
-        </span>
-        {page * 50 < result.total && (
-          <Link href={"?resource=" + resource + "&page=" + (page + 1)}>
-            Berikutnya
-          </Link>
-        )}
-      </div>
+
+      <ListPager page={page} total={result.total} query={{ resource }} />
+
+      {open && (
+        <Modal
+          size="modal-lg"
+          title={(editing ? "Ubah " : "Tambah ") + LABELS[resource].toLowerCase()}
+          onClose={() => setOpen(false)}
+          busy={busy}
+          footer={
+            <>
+              <button type="button" className="btn btn-outline" onClick={() => setOpen(false)} disabled={busy}>Batal</button>
+              <button type="submit" form="master-form" className="btn btn-primary" disabled={busy}>
+                {busy ? "Menyimpan…" : "Simpan"}
+              </button>
+            </>
+          }
+        >
+          <form onSubmit={save} id="master-form" key={editing?.id ?? "new"} className="form-stack">
+            {error && <p role="alert" className="alert alert-danger">{error}</p>}
+            {resource === "assignments" && (
+              <p className="alert alert-info">
+                <Info aria-hidden /> Isi tarif harian untuk dasar gaji harian, atau alokasi bulanan untuk dasar gaji bulanan.
+              </p>
+            )}
+            <div className="form-grid">
+              {FIELDS[resource].map(([key, label, type]) => {
+                const options =
+                  type === "projects"
+                    ? projects.map((i) => [i.id, i.code + " — " + i.name])
+                    : type === "employees"
+                      ? employees.map((i) => [i.id, i.name])
+                      : Array.isArray(type)
+                        ? type.map((i) => [i, i === "" ? "Tanpa mapping" : humanize(i)])
+                        : null;
+                const raw = editing?.[key],
+                  value =
+                    typeof type === "string" && type.startsWith("date") && raw
+                      ? new Date(raw).toISOString().slice(0, 10)
+                      : raw === false
+                        ? "false"
+                        : raw === true
+                          ? "true"
+                          : (raw ?? (key === "isActive" ? "true" : ""));
+                const required = options ? key !== "purpose" : !type?.endsWith?.("optional");
+                const id = "md-" + key;
+                return (
+                  <div className="form-group" key={key}>
+                    <label className={"form-label " + (required ? "required" : "")} htmlFor={id}>{label}</label>
+                    {options ? (
+                      <select id={id} name={key} className="form-select" defaultValue={value} required={required}>
+                        {key !== "purpose" && <option value="">Pilih</option>}
+                        {options.map(([v, l]) => (
+                          <option value={v} key={v}>{l}</option>
+                        ))}
+                      </select>
+                    ) : (
+                      <input
+                        id={id}
+                        name={key}
+                        className="form-input"
+                        defaultValue={value}
+                        type={type?.startsWith?.("number") ? "number" : type?.startsWith?.("date") ? "date" : "text"}
+                        step={type?.startsWith?.("number") ? "0.01" : undefined}
+                        required={required}
+                        maxLength={500}
+                      />
+                    )}
+                  </div>
+                );
+              })}
+            </div>
+          </form>
+        </Modal>
+      )}
     </div>
   );
 }

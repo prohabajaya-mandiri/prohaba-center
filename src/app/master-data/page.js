@@ -5,6 +5,8 @@ import { listMaster, masterRoles } from "@/lib/services/master";
 import { pagination } from "@/lib/validation";
 import AppLayout from "@/components/AppLayout";
 import MasterClient from "./MasterClient";
+
+export const metadata = { title: 'Master Data' };
 export default async function MasterPage({ searchParams }) {
   const session = await auth();
   if (!session?.user) redirect("/login");

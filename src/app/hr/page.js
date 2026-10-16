@@ -7,6 +7,8 @@ import ListPager from "@/components/ListPager";
 import { pageQuery } from "@/lib/page-query";
 import HRClient from "./HRClient";
 import { date } from "@/lib/validation";
+
+export const metadata = { title: 'Karyawan & Absensi' };
 export default async function HRPage({ searchParams }) {
   const session = await auth();
   if (!session?.user) redirect("/login");

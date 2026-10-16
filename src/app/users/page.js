@@ -7,6 +7,8 @@ import { redirect } from 'next/navigation';
 import AppLayout from '@/components/AppLayout';
 import UsersClient from './UsersClient';
 
+export const metadata = { title: 'Pengguna' };
+
 export default async function UsersPage({searchParams}) {
   const session = await auth();
   if (!session?.user) redirect('/login');

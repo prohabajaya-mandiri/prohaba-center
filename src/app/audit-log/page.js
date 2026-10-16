@@ -4,6 +4,8 @@ import { redirect } from 'next/navigation';
 import AppLayout from '@/components/AppLayout';
 import AuditLogClient from './AuditLogClient';
 
+export const metadata = { title: 'Audit Log' };
+
 export const revalidate = 0;
 
 export default async function AuditLogPage() {

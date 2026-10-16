@@ -1,7 +1,7 @@
 import LoginClient from './LoginClient'
 
 export const metadata = {
-  title: 'Login - ERP Prohaba Jaya Mandiri',
+  title: 'Masuk',
 }
 
 export default function LoginPage() {

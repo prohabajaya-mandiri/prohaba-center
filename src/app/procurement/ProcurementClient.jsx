@@ -1,229 +1,209 @@
 'use client';
-import { apiFetch } from '@/lib/client-api';
+import { apiFetch, businessToday } from '@/lib/client-api';
 
 import { useState } from 'react';
 import { useRouter } from 'next/navigation';
-import { ShoppingCart, Plus, CheckCircle, Clock, Truck, FileText, FileSignature, Info } from 'lucide-react';
+import { ShoppingCart, Plus, FileText, Info, Eye, PackageCheck } from 'lucide-react';
 import { useDialog } from '@/components/DialogProvider';
+import { EmptyRow, Modal, StatusBadge } from '@/components/ui';
+import { idr, fmtDate } from '@/lib/ui-labels';
 
 export default function ProcurementClient({ purchaseOrders, materialRequests, vendors, user }) {
   const router = useRouter();
-  const [receipt,setReceipt]=useState(null),[receiptError,setReceiptError]=useState('');
+  const [receipt, setReceipt] = useState(null);
+  const [receiptError, setReceiptError] = useState('');
+  const [detail, setDetail] = useState(null);
   const [activeTab, setActiveTab] = useState('list');
   const [selectedMR, setSelectedMR] = useState(materialRequests[0] || null);
   const [selectedVendor, setSelectedVendor] = useState('');
   const [deliveryNotes, setDeliveryNotes] = useState('');
-  const [poItems, setPoItems] = useState(
-    materialRequests[0] ? materialRequests[0].items.map(item => ({ ...item, unitPrice: 0 })) : []
-  );
+  const [poItems, setPoItems] = useState(materialRequests[0] ? materialRequests[0].items.map((item) => ({ ...item, unitPrice: 0 })) : []);
   const [isSubmitting, setIsSubmitting] = useState(false);
-  
   const { showAlert } = useDialog();
+  const canManage = ['TOP_MANAGEMENT', 'LOGISTIK'].includes(user.role);
 
   const handleMRChange = (mrId) => {
-    const mr = materialRequests.find(m => m.id === mrId);
-    setSelectedMR(mr);
-    if (mr) {
-      setPoItems(mr.items.map(item => ({ ...item, unitPrice: 0 })));
-    } else {
-      setPoItems([]);
-    }
+    const mr = materialRequests.find((m) => m.id === mrId);
+    setSelectedMR(mr ?? null);
+    setPoItems(mr ? mr.items.map((item) => ({ ...item, unitPrice: 0 })) : []);
   };
 
   const handlePriceChange = (index, price) => {
-    const newItems = [...poItems];
-    newItems[index].unitPrice = parseFloat(price) || 0;
-    setPoItems(newItems);
+    setPoItems((prev) => prev.map((it, i) => (i === index ? { ...it, unitPrice: parseFloat(price) || 0 } : it)));
   };
+
+  const total = poItems.reduce((s, i) => s + i.quantity * i.unitPrice, 0);
 
   const handleSubmit = async () => {
     if (!selectedMR || !selectedVendor) {
-      await showAlert('Pilih MR dan Vendor', 'Peringatan');
+      await showAlert('Pilih material request dan vendor terlebih dahulu.', 'Peringatan');
       return;
     }
-    
-    // Check if any unit price is 0
-    if (poItems.some(i => i.unitPrice <= 0)) {
-      await showAlert('Semua item harus memiliki estimasi harga satuan lebih dari 0.', 'Peringatan');
+    if (poItems.some((i) => i.unitPrice <= 0)) {
+      await showAlert('Setiap item harus memiliki harga satuan lebih dari 0.', 'Peringatan');
       return;
     }
-
     setIsSubmitting(true);
     try {
-      const payload = {
-        mrId: selectedMR.id,
-        vendorId: selectedVendor,
-        notes: deliveryNotes,
-        items: poItems.map(item => ({
-          mrItemId: item.id,
-          unitPrice: item.unitPrice
-        }))
-      };
-
-      const res = await apiFetch('/api/procurement', {
+      await apiFetch('/api/procurement', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify(payload)
+        body: JSON.stringify({
+          mrId: selectedMR.id,
+          vendorId: selectedVendor,
+          notes: deliveryNotes,
+          items: poItems.map((item) => ({ mrItemId: item.id, unitPrice: item.unitPrice })),
+        }),
       });
-      
-      if (!res.ok) {
-        const err = await res.json();
-        throw new Error(err.error || 'Gagal menerbitkan PO');
-      }
-
-      await showAlert('Purchase Order berhasil diterbitkan!', 'Sukses');
       setActiveTab('list');
       setSelectedMR(null);
       setSelectedVendor('');
       setDeliveryNotes('');
       setPoItems([]);
       router.refresh();
+      await showAlert('Purchase order berhasil diterbitkan.', 'Berhasil');
     } catch (error) {
-      await showAlert(error.message, 'Error');
+      await showAlert(error.message, 'Gagal');
     } finally {
       setIsSubmitting(false);
     }
   };
 
-  const formatCurrency = (amount) => {
-    return new Intl.NumberFormat('id-ID', { style: 'currency', currency: 'IDR' }).format(amount);
-  };
-
-  const getStatusBadge = (status) => {
-    switch (status) {
-      case 'CREATED': return <span className="badge badge-gray">Draft</span>;
-      case 'SENT': return <span className="badge badge-info"><FileSignature size={12} className="mr-1 inline" /> Terkirim ke Vendor</span>;
-      case 'CONFIRMED': return <span className="badge badge-primary"><CheckCircle size={12} className="mr-1 inline" /> Dikonfirmasi</span>;
-      case 'DELIVERED': return <span className="badge badge-success"><Truck size={12} className="mr-1 inline" /> Terkirim ke Site</span>;
-      default: return <span className="badge">{status}</span>;
+  const submitReceipt = async (e) => {
+    e.preventDefault();
+    setIsSubmitting(true);
+    setReceiptError('');
+    try {
+      const form = new FormData(e.currentTarget);
+      const items = receipt.items.map((i) => ({ id: i.id, quantity: Number(form.get(i.id) || 0) })).filter((i) => i.quantity > 0);
+      if (!items.length) throw new Error('Isi jumlah diterima untuk minimal satu item.');
+      await apiFetch('/api/procurement/' + receipt.id + '/receive', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ reference: form.get('reference'), receivedAt: form.get('receivedAt'), items }),
+      });
+      setReceipt(null);
+      router.refresh();
+      await showAlert('Penerimaan barang tersimpan.', 'Berhasil');
+    } catch (err) {
+      setReceiptError(err.message);
+    } finally {
+      setIsSubmitting(false);
     }
   };
 
   return (
-    <>
-      {receipt&&<div role="dialog" aria-modal="true" style={{position:'fixed',inset:0,background:'#0008',zIndex:9999,display:'grid',placeItems:'center',padding:20}}><form className="card" style={{padding:24,width:'min(600px,100%)',display:'grid',gap:12}} onSubmit={async e=>{e.preventDefault();setIsSubmitting(true);setReceiptError('');try{const form=new FormData(e.currentTarget);await apiFetch('/api/procurement/'+receipt.id+'/receive',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({reference:form.get('reference'),receivedAt:form.get('receivedAt'),items:receipt.items.map(i=>({id:i.id,quantity:Number(form.get(i.id)||0)})).filter(i=>i.quantity>0)})});setReceipt(null);router.refresh();}catch(err){setReceiptError(err.message);}finally{setIsSubmitting(false);}}}><h2>Penerimaan {receipt.poNumber}</h2>{receiptError&&<p role="alert">{receiptError}</p>}<label>Referensi bukti<input name="reference" className="form-input" required maxLength={200}/></label><label>Tanggal<input name="receivedAt" type="date" className="form-input" defaultValue={new Intl.DateTimeFormat('en-CA',{timeZone:'Asia/Makassar'}).format(new Date())} required/></label>{receipt.items.filter(i=>i.quantity>i.deliveredQty).map(i=><label key={i.id}>{i.description} (sisa {i.quantity-i.deliveredQty} {i.unit})<input name={i.id} type="number" className="form-input" min="0" max={i.quantity-i.deliveredQty} step="0.001" defaultValue={i.quantity-i.deliveredQty}/></label>)}<div><button className="btn btn-primary" disabled={isSubmitting}>Simpan penerimaan</button> <button type="button" className="btn btn-outline" disabled={isSubmitting} onClick={()=>setReceipt(null)}>Batal</button></div></form></div>}
-      <div className="tabs">
-        <button className={`tab ${activeTab === 'list' ? 'active' : ''}`} onClick={() => setActiveTab('list')}>
-          <FileText size={16} className="inline-block mr-2" />
-          Daftar Purchase Order
-        </button>
-        {['TOP_MANAGEMENT','LOGISTIK'].includes(user.role) && (
-          <button className={`tab ${activeTab === 'create' ? 'active' : ''}`} onClick={() => setActiveTab('create')}>
-            <Plus size={16} className="inline-block mr-2" />
-            Buat PO dari MR
+    <div className="stack">
+      <div className="card">
+        <div className="tabs" role="tablist">
+          <button role="tab" aria-selected={activeTab === 'list'} className={`tab ${activeTab === 'list' ? 'active' : ''}`} onClick={() => setActiveTab('list')}>
+            <FileText aria-hidden /> Daftar purchase order
           </button>
-        )}
-      </div>
+          {canManage && (
+            <button role="tab" aria-selected={activeTab === 'create'} className={`tab ${activeTab === 'create' ? 'active' : ''}`} onClick={() => setActiveTab('create')}>
+              <Plus aria-hidden /> Buat PO dari MR
+            </button>
+          )}
+        </div>
 
-      {activeTab === 'list' && (
-        <div className="card">
-          <div className="card-body p-0">
-            <table className="table">
+        {activeTab === 'list' && (
+          <div className="table-wrapper">
+            <table>
               <thead>
                 <tr>
                   <th>No. PO</th>
                   <th>Proyek</th>
                   <th>Vendor</th>
-                  <th>Total Nilai</th>
+                  <th className="num">Total nilai</th>
                   <th>Status</th>
-                  <th>Referensi MR</th>
+                  <th>Ref. MR</th>
                   <th>Tanggal</th>
-                  <th>Aksi</th>
+                  <th className="num">Aksi</th>
                 </tr>
               </thead>
               <tbody>
                 {purchaseOrders.length === 0 ? (
-                  <tr><td colSpan={8} className="text-center py-8 text-gray-500">Belum ada Purchase Order.</td></tr>
-                ) : (
-                  purchaseOrders.map(po => (
-                    <tr key={po.id}>
-                      <td style={{ fontWeight: 700, color: 'var(--navy-700)' }}>{po.poNumber}</td>
-                      <td>{po.project.code}</td>
-                      <td>{po.vendor.name}</td>
-                      <td style={{ fontWeight: 600 }}>{formatCurrency(po.totalAmount)}</td>
-                      <td>{getStatusBadge(po.status)}</td>
-                      <td style={{ fontSize: 13, color: 'var(--gray-600)' }}>{po.mr?.mrNumber || '-'}</td>
-                      <td style={{ fontSize: 12.5, color: 'var(--gray-500)' }}>{new Date(po.createdAt).toLocaleDateString('id-ID')}</td>
-                      <td>
-                        <button className="btn btn-sm btn-outline" onClick={()=>showAlert(po.items.map(i=>i.description+' — '+i.quantity+' '+i.unit+' (diterima '+i.deliveredQty+')').join('\n'),'Detail PO')}>Detail</button>{['TOP_MANAGEMENT','LOGISTIK'].includes(user.role)&&['CREATED','SENT','CONFIRMED','PARTIAL'].includes(po.status)&&<button className="btn btn-sm btn-primary" onClick={()=>{setReceipt(po);setReceiptError('');}}>Catat penerimaan</button>}
-                      </td>
-                    </tr>
-                  ))
-                )}
+                  <EmptyRow colSpan={8} title="Belum ada purchase order" />
+                ) : purchaseOrders.map((po) => (
+                  <tr key={po.id}>
+                    <td className="cell-title nowrap">{po.poNumber}</td>
+                    <td>{po.project.code}</td>
+                    <td>{po.vendor.name}</td>
+                    <td className="num" style={{ fontWeight: 600, color: 'var(--gray-900)' }}>{idr(po.totalAmount)}</td>
+                    <td><StatusBadge value={po.status} /></td>
+                    <td>{po.mr?.mrNumber || '-'}</td>
+                    <td className="nowrap">{fmtDate(po.createdAt)}</td>
+                    <td>
+                      <div className="row-actions">
+                        <button className="btn btn-sm btn-outline" onClick={() => setDetail(po)}><Eye aria-hidden /> Detail</button>
+                        {canManage && ['CREATED', 'SENT', 'CONFIRMED', 'PARTIAL'].includes(po.status) && (
+                          <button className="btn btn-sm btn-primary" onClick={() => { setReceipt(po); setReceiptError(''); }}>
+                            <PackageCheck aria-hidden /> Terima barang
+                          </button>
+                        )}
+                      </div>
+                    </td>
+                  </tr>
+                ))}
               </tbody>
             </table>
           </div>
-        </div>
-      )}
+        )}
 
-      {activeTab === 'create' && (
-        <div className="card">
-          <div className="card-header">
-            <div className="card-title">Buat Purchase Order Baru</div>
-          </div>
-          <div className="card-body">
+        {activeTab === 'create' && (
+          <div className="card-body form-stack">
             <div className="alert alert-info">
-              <Info size={16} style={{ flexShrink: 0 }} />
-              Pilih Material Request yang disetujui untuk konversi menjadi Purchase Order.
+              <Info aria-hidden />
+              Pilih material request yang sudah disetujui untuk dijadikan purchase order.
             </div>
 
-            <div className="form-grid" style={{ marginBottom: 20 }}>
+            <div className="form-grid">
               <div className="form-group">
-                <label className="form-label required">Sumber MR</label>
-                <select className="form-input form-select" value={selectedMR?.id || ''} onChange={e => handleMRChange(e.target.value)}>
-                  {materialRequests.length === 0 && <option value="">-- Tidak ada MR siap proses --</option>}
-                  {materialRequests.map(mr => (
-                    <option key={mr.id} value={mr.id}>{mr.mrNumber} - {mr.project.code}</option>
-                  ))}
+                <label className="form-label required" htmlFor="po-mr">Sumber material request</label>
+                <select id="po-mr" className="form-select" value={selectedMR?.id || ''} onChange={(e) => handleMRChange(e.target.value)}>
+                  {materialRequests.length === 0 && <option value="">Tidak ada MR yang siap diproses</option>}
+                  {materialRequests.map((mr) => <option key={mr.id} value={mr.id}>{mr.mrNumber} — {mr.project.code}</option>)}
                 </select>
               </div>
               <div className="form-group">
-                <label className="form-label required">Pilih Vendor</label>
-                <select className="form-input form-select" value={selectedVendor} onChange={e => setSelectedVendor(e.target.value)}>
-                  <option value="">-- Pilih Vendor --</option>
-                  {vendors.map(v => (
-                    <option key={v.id} value={v.id}>{v.name} ({v.code})</option>
-                  ))}
+                <label className="form-label required" htmlFor="po-vendor">Vendor</label>
+                <select id="po-vendor" className="form-select" value={selectedVendor} onChange={(e) => setSelectedVendor(e.target.value)}>
+                  <option value="">Pilih vendor</option>
+                  {vendors.map((v) => <option key={v.id} value={v.id}>{v.name} ({v.code})</option>)}
                 </select>
               </div>
             </div>
 
             {selectedMR && (
-              <div style={{ marginBottom: 20 }}>
-                <label className="form-label required">Item untuk dipesan</label>
-                <div style={{ border: '1px solid var(--gray-200)', borderRadius: 'var(--radius-md)', overflow: 'hidden' }}>
-                  <table className="table">
-                    <thead style={{ background: 'var(--gray-50)' }}>
+              <div className="form-group">
+                <span className="form-label required">Harga per item</span>
+                <div className="table-wrapper" style={{ border: '1px solid var(--gray-200)', borderRadius: 'var(--radius-md)' }}>
+                  <table>
+                    <thead>
                       <tr>
-                        <th>Deskripsi Barang</th>
+                        <th>Barang</th>
                         <th>Satuan</th>
-                        <th>Kuantitas</th>
-                        <th>Estimasi Harga</th>
-                        <th>Total Harga</th>
+                        <th className="num">Kuantitas</th>
+                        <th>Harga satuan (Rp)</th>
+                        <th className="num">Subtotal</th>
                       </tr>
                     </thead>
                     <tbody>
                       {poItems.map((item, index) => (
-                        <tr key={index}>
-                          <td style={{ fontWeight: 500 }}>{item.description}</td>
+                        <tr key={item.id ?? index}>
+                          <td style={{ fontWeight: 500, color: 'var(--gray-900)' }}>{item.description}</td>
                           <td>{item.unit}</td>
-                          <td style={{ fontWeight: 600 }}>{item.quantity}</td>
-                          <td>
-                            <input 
-                              type="number" 
-                              className="form-input" 
-                              placeholder="Rp..." 
-                              value={item.unitPrice || ''}
-                              onChange={e => handlePriceChange(index, e.target.value)}
-                            />
+                          <td className="num">{Number(item.quantity).toLocaleString('id-ID')}</td>
+                          <td style={{ padding: '8px 10px' }}>
+                            <input type="number" min="0" className="form-input" aria-label={`Harga satuan ${item.description}`} style={{ width: 170 }} value={item.unitPrice || ''} onChange={(e) => handlePriceChange(index, e.target.value)} />
                           </td>
-                          <td>
-                            <span style={{ fontWeight: 600, color: 'var(--gray-500)' }}>
-                              {formatCurrency(item.quantity * item.unitPrice)}
-                            </span>
-                          </td>
+                          <td className="num" style={{ fontWeight: 600 }}>{idr(item.quantity * item.unitPrice)}</td>
                         </tr>
                       ))}
+                      <tr>
+                        <td colSpan={4} className="num" style={{ fontWeight: 600 }}>Total</td>
+                        <td className="num" style={{ fontWeight: 600, color: 'var(--gray-900)' }}>{idr(total)}</td>
+                      </tr>
                     </tbody>
                   </table>
                 </div>
@@ -231,20 +211,90 @@ export default function ProcurementClient({ purchaseOrders, materialRequests, ve
             )}
 
             <div className="form-group">
-              <label className="form-label">Catatan Pengiriman</label>
-              <textarea className="form-input" rows="3" placeholder="Catatan pengiriman..." value={deliveryNotes} onChange={e => setDeliveryNotes(e.target.value)}></textarea>
+              <label className="form-label" htmlFor="po-notes">Catatan pengiriman</label>
+              <textarea id="po-notes" className="form-input" rows="3" value={deliveryNotes} onChange={(e) => setDeliveryNotes(e.target.value)} />
             </div>
 
-            <div style={{ display: 'flex', justifyContent: 'flex-end', gap: 10, marginTop: 24 }}>
+            <div className="form-actions">
               <button className="btn btn-outline" onClick={() => setActiveTab('list')}>Batal</button>
-              <button className="btn btn-primary" onClick={handleSubmit} disabled={materialRequests.length === 0 || isSubmitting}>
-                <ShoppingCart size={16} className="inline-block mr-2" />
-                {isSubmitting ? 'Menerbitkan...' : 'Terbitkan PO'}
+              <button className="btn btn-primary" onClick={handleSubmit} disabled={!selectedMR || isSubmitting}>
+                <ShoppingCart aria-hidden /> {isSubmitting ? 'Menerbitkan…' : 'Terbitkan PO'}
               </button>
             </div>
           </div>
-        </div>
+        )}
+      </div>
+
+      {detail && (
+        <Modal
+          size="modal-lg"
+          title={`Purchase order ${detail.poNumber}`}
+          subtitle={`${detail.project.code} · ${detail.vendor.name} · ${fmtDate(detail.createdAt)}`}
+          onClose={() => setDetail(null)}
+          footer={<button className="btn btn-outline" onClick={() => setDetail(null)}>Tutup</button>}
+        >
+          <div className="table-wrapper" style={{ border: '1px solid var(--gray-200)', borderRadius: 'var(--radius-md)' }}>
+            <table>
+              <thead>
+                <tr><th>Barang</th><th className="num">Dipesan</th><th className="num">Diterima</th><th>Satuan</th></tr>
+              </thead>
+              <tbody>
+                {detail.items.map((i) => (
+                  <tr key={i.id}>
+                    <td>{i.description}</td>
+                    <td className="num">{Number(i.quantity).toLocaleString('id-ID')}</td>
+                    <td className="num" style={{ color: i.deliveredQty >= i.quantity ? 'var(--green-700)' : undefined }}>{Number(i.deliveredQty).toLocaleString('id-ID')}</td>
+                    <td>{i.unit}</td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+        </Modal>
       )}
-    </>
+
+      {receipt && (
+        <Modal
+          title={`Penerimaan barang — ${receipt.poNumber}`}
+          subtitle={`${receipt.vendor.name} · ${receipt.project.code}`}
+          onClose={() => setReceipt(null)}
+          busy={isSubmitting}
+          footer={
+            <>
+              <button type="button" className="btn btn-outline" disabled={isSubmitting} onClick={() => setReceipt(null)}>Batal</button>
+              <button type="submit" form="receipt-form" className="btn btn-primary" disabled={isSubmitting}>{isSubmitting ? 'Menyimpan…' : 'Simpan penerimaan'}</button>
+            </>
+          }
+        >
+          <form id="receipt-form" className="form-stack" onSubmit={submitReceipt}>
+            {receiptError && <p role="alert" className="alert alert-danger">{receiptError}</p>}
+            <div className="form-grid">
+              <div className="form-group">
+                <label className="form-label required" htmlFor="rc-ref">No. surat jalan / bukti</label>
+                <input id="rc-ref" name="reference" className="form-input" required maxLength={200} />
+              </div>
+              <div className="form-group">
+                <label className="form-label required" htmlFor="rc-date">Tanggal diterima</label>
+                <input id="rc-date" name="receivedAt" type="date" className="form-input" defaultValue={businessToday()} required />
+              </div>
+            </div>
+            <div className="form-group">
+              <span className="form-label">Jumlah diterima per item</span>
+              <div className="form-stack" style={{ gap: 10 }}>
+                {receipt.items.filter((i) => i.quantity > i.deliveredQty).map((i) => (
+                  <div key={i.id} style={{ display: 'flex', alignItems: 'center', gap: 12, flexWrap: 'wrap' }}>
+                    <label htmlFor={'rc-' + i.id} style={{ flex: '1 1 220px', fontSize: 14 }}>
+                      {i.description}
+                      <span className="cell-sub" style={{ display: 'block' }}>sisa {i.quantity - i.deliveredQty} {i.unit}</span>
+                    </label>
+                    <input id={'rc-' + i.id} name={i.id} type="number" className="form-input" style={{ width: 150 }} min="0" max={i.quantity - i.deliveredQty} step="0.001" defaultValue={i.quantity - i.deliveredQty} />
+                  </div>
+                ))}
+              </div>
+            </div>
+          </form>
+        </Modal>
+      )}
+    </div>
   );
 }

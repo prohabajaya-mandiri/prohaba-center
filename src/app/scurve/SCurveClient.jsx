@@ -1,92 +1,109 @@
 'use client';
-import { apiFetch } from '@/lib/client-api';
+import { apiFetch, businessToday } from '@/lib/client-api';
 
-import { useState, useEffect, useCallback, useRef } from 'react';
+import { useState, useEffect, useCallback, useRef, useMemo } from 'react';
 import { useDialog } from '@/components/DialogProvider';
-import { motion, AnimatePresence } from 'framer-motion';
+import { Modal } from '@/components/ui';
 import {
-  LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip, Legend,
+  Line, XAxis, YAxis, CartesianGrid, Tooltip,
   ResponsiveContainer, ReferenceLine, Area, ComposedChart,
 } from 'recharts';
 import {
   Plus, Upload, FileSpreadsheet, Calendar, BarChart2, Table2,
-  CheckCircle, AlertTriangle, TrendingUp, TrendingDown,
-  ChevronDown, ChevronRight, Save, RefreshCw, Download, Edit, Trash2,
-  Loader2, Info, Activity,
+  CheckCircle, Save, RefreshCw, Edit, Trash2, Loader2, Info, Activity,
 } from 'lucide-react';
 
-// ─── Helpers ────────────────────────────────────────────────────
+// ─── Helpers ────────────────────────────────────────────────────────────────
 const fmtIDR = (v) => {
   if (!v) return '-';
-  if (v >= 1e9) return `Rp ${(v / 1e9).toFixed(1)}M`;
-  if (v >= 1e6) return `Rp ${(v / 1e6).toFixed(0)}jt`;
-  return `Rp ${v.toLocaleString('id-ID')}`;
+  if (v >= 1e9) return `Rp ${(v / 1e9).toLocaleString('id-ID', { maximumFractionDigits: 2 })} M`;
+  if (v >= 1e6) return `Rp ${(v / 1e6).toLocaleString('id-ID', { maximumFractionDigits: 1 })} jt`;
+  return `Rp ${Number(v).toLocaleString('id-ID')}`;
 };
 
-const MONTHS_ID = ['Jan','Feb','Mar','Apr','Mei','Jun','Jul','Ags','Sep','Okt','Nov','Des'];
+const MONTHS_ID = ['Jan', 'Feb', 'Mar', 'Apr', 'Mei', 'Jun', 'Jul', 'Ags', 'Sep', 'Okt', 'Nov', 'Des'];
 const fmtMonth = (m) => {
   if (!m) return '-';
   const [y, mo] = m.split('-');
-  return `${MONTHS_ID[parseInt(mo)-1]} ${y}`;
+  return `${MONTHS_ID[parseInt(mo, 10) - 1]} ${y}`;
 };
+const monthIndex = (m) => {
+  const [y, mo] = m.split('-').map(Number);
+  return y * 12 + mo - 1;
+};
+const pct = (v) => `${Number(v).toLocaleString('id-ID', { minimumFractionDigits: 1, maximumFractionDigits: 1 })}%`;
 
-const levelIndent = { 1: 0, 2: 16, 3: 32, 4: 44 };
+const levelIndent = { 1: 0, 2: 16, 3: 32, 4: 48 };
 const levelStyle = {
-  1: { fontWeight: 700, fontSize: 13, color: 'var(--navy-800)', textTransform: 'uppercase', letterSpacing: 0.3 },
-  2: { fontWeight: 600, fontSize: 13, color: 'var(--gray-800)' },
-  3: { fontWeight: 500, fontSize: 12.5, color: 'var(--gray-700)' },
-  4: { fontWeight: 400, fontSize: 12, color: 'var(--gray-500)' },
+  1: { fontWeight: 600, color: 'var(--brand-800)' },
+  2: { fontWeight: 600, color: 'var(--gray-800)' },
+  3: { fontWeight: 500, color: 'var(--gray-700)' },
+  4: { fontWeight: 400, color: 'var(--gray-600)' },
 };
 
 const CustomTooltip = ({ active, payload, label }) => {
   if (!active || !payload?.length) return null;
+  const plan = payload.find((p) => p.dataKey === 'planned')?.value;
+  const actual = payload.find((p) => p.dataKey === 'actual')?.value;
   return (
-    <div style={{ background:'white', border:'1px solid var(--gray-200)', borderRadius:'var(--radius-md)', padding:'10px 14px', boxShadow:'var(--shadow-lg)', fontSize:12.5 }}>
-      <div style={{ fontWeight:700, color:'var(--gray-900)', marginBottom:8 }}>{fmtMonth(label)}</div>
-      {payload.map((p, i) => (
-        <div key={i} style={{ display:'flex', alignItems:'center', gap:8, marginBottom:4 }}>
-          <div style={{ width:10, height:10, borderRadius:2, background:p.color }} />
-          <span style={{ color:'var(--gray-600)' }}>{p.name}:</span>
-          <strong style={{ color:p.color }}>{Number(p.value).toFixed(1)}%</strong>
+    <div className="chart-tooltip">
+      <div style={{ fontWeight: 600, color: 'var(--gray-900)', marginBottom: 6 }}>{fmtMonth(label)}</div>
+      {payload.map((p) => (
+        <div key={p.dataKey} style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 2 }}>
+          <span className="legend-dot" style={{ background: p.color }} />
+          <span style={{ color: 'var(--gray-600)' }}>{p.name}:</span>
+          <strong style={{ color: 'var(--gray-900)' }}>{pct(p.value)}</strong>
         </div>
       ))}
-      {payload.length >= 2 && payload[0].value != null && payload[1].value != null && (
-        <div style={{ marginTop:8, paddingTop:8, borderTop:'1px solid var(--gray-100)', fontSize:12 }}>
-          <span style={{ color: payload[0].value > payload[1].value ? 'var(--red-500)' : 'var(--green-500)', fontWeight:600 }}>
-            {payload[0].value > payload[1].value ? '⚠ Behind ' : '✓ Ahead '}
-            {Math.abs(payload[0].value - payload[1].value).toFixed(1)}%
-          </span>
+      {plan != null && actual != null && (
+        <div style={{ marginTop: 6, paddingTop: 6, borderTop: '1px solid var(--gray-100)', fontWeight: 600, color: actual < plan ? 'var(--red-600)' : 'var(--green-600)' }}>
+          {actual < plan ? 'Terlambat ' : 'Lebih cepat '}{pct(Math.abs(actual - plan))}
         </div>
       )}
     </div>
   );
 };
 
-// ─── Main Component ─────────────────────────────────────────────
+const TABS = [
+  { id: 'scurve', label: 'Kurva S', icon: Activity },
+  { id: 'boq', label: 'Upload BOQ', icon: Upload },
+  { id: 'schedule', label: 'Jadwal item', icon: Calendar },
+  { id: 'actual', label: 'Input realisasi', icon: Table2 },
+  { id: 'report', label: 'Laporan', icon: BarChart2 },
+];
+
+function NeedBoq({ onGo }) {
+  return (
+    <div className="empty-state">
+      <FileSpreadsheet aria-hidden />
+      <h3>Belum ada data BOQ</h3>
+      <p>Unggah file BOQ (.xlsx) terlebih dahulu di tab &quot;Upload BOQ&quot;.</p>
+      <button className="btn btn-primary" onClick={onGo}><Upload aria-hidden /> Upload BOQ</button>
+    </div>
+  );
+}
+
+// ─── Main Component ─────────────────────────────────────────────────────────
 export default function SCurveClient({ projects, user }) {
-  const readOnly = user?.role === 'FINANCE';
+  const readOnly = !['TOP_MANAGEMENT', 'ENGINEERING', 'PJO'].includes(user?.role);
   const [selectedProjectId, setSelectedProjectId] = useState(projects?.[0]?.id || '');
   const [activeTab, setActiveTab] = useState('scurve');
   const [data, setData] = useState(null);
   const [loading, setLoading] = useState(false);
   const [uploading, setUploading] = useState(false);
-  const [uploadMsg, setUploadMsg] = useState(null);
+  const [dragging, setDragging] = useState(false);
+  const [message, setMessage] = useState(null);
   const [scheduleEdits, setScheduleEdits] = useState({});
   const [savingSchedule, setSavingSchedule] = useState(false);
   const [actualEdits, setActualEdits] = useState({});
-  const [selectedMonth, setSelectedMonth] = useState(() => {
-    const now = new Date();
-    return `${now.getFullYear()}-${String(now.getMonth()+1).padStart(2,'0')}`;
-  });
-  const [collapsed, setCollapsed] = useState({});
-  const [editingItem, setEditingItem] = useState(null);
-  const [isAddingItem, setIsAddingItem] = useState(false);
-  const [newItem, setNewItem] = useState({ code: "", description: "", totalPrice: "" });
+  const [savingActual, setSavingActual] = useState(null);
+  const [selectedMonth, setSelectedMonth] = useState(() => businessToday().slice(0, 7));
+  const [itemForm, setItemForm] = useState(null); // { id?, code, description, totalPrice }
+  const [savingItem, setSavingItem] = useState(false);
   const { showConfirm, showAlert } = useDialog();
-
   const fileInputRef = useRef();
 
-  const selectedProject = projects?.find(p => p.id === selectedProjectId);
+  const selectedProject = projects?.find((p) => p.id === selectedProjectId);
 
   const loadData = useCallback(async () => {
     if (!selectedProjectId) return;
@@ -95,95 +112,99 @@ export default function SCurveClient({ projects, user }) {
       const res = await apiFetch(`/api/scurve?projectId=${selectedProjectId}`);
       const json = await res.json();
       setData(json);
-      // Init schedule edits from existing data
       const edits = {};
-      json.boqItems?.forEach(item => {
+      json.boqItems?.forEach((item) => {
         if (item.isLeaf) edits[item.id] = { startMonth: item.startMonth || '', endMonth: item.endMonth || '' };
       });
       setScheduleEdits(edits);
     } catch (e) {
-      console.error(e);
+      setMessage({ type: 'error', text: e.message });
     } finally {
       setLoading(false);
     }
   }, [selectedProjectId]);
 
-  useEffect(() => { const timer=setTimeout(loadData,0); return ()=>clearTimeout(timer); }, [loadData]);
+  useEffect(() => { const timer = setTimeout(loadData, 0); return () => clearTimeout(timer); }, [loadData]);
 
-  
-  // ─── Edit / Delete BOQ Item ────────────────────────────────────
+  const items = useMemo(() => data?.boqItems ?? [], [data]);
+  const leaves = useMemo(() => items.filter((i) => i.isLeaf), [items]);
+  const hasBoq = items.length > 0;
+  const scheduledCount = leaves.filter((i) => i.startMonth && i.endMonth).length;
+  const scheduledPct = leaves.length ? Math.round((scheduledCount / leaves.length) * 100) : 0;
+  const lastPlan = data?.scurveData?.length ? data.scurveData[data.scurveData.length - 1].planned : null;
+
+  // ─── Laporan per kelompok: rencana s.d. bulan ini vs realisasi ──────────
+  const report = useMemo(() => {
+    const now = monthIndex(businessToday().slice(0, 7));
+    const planShare = (leaf) => {
+      if (!leaf.startMonth || !leaf.endMonth) return 0;
+      const s = monthIndex(leaf.startMonth), e = monthIndex(leaf.endMonth);
+      const n = e - s + 1;
+      if (n <= 0) return 0;
+      return Math.min(1, Math.max(0, (now - s + 1) / n));
+    };
+    const doneShare = (leaf) => Math.min(1, (leaf.actuals ?? []).reduce((s, a) => s + (a.progressPct || 0), 0) / 100);
+    return items
+      .filter((i) => i.level <= 2)
+      .map((group) => {
+        const prefix = group.code.toUpperCase() + '.';
+        const members = group.isLeaf ? [group] : leaves.filter((l) => l.code.toUpperCase().startsWith(prefix));
+        const weight = members.reduce((s, l) => s + (l.weight || 0), 0);
+        if (!weight) return null;
+        const planned = (members.reduce((s, l) => s + (l.weight || 0) * planShare(l), 0) / weight) * 100;
+        const actual = (members.reduce((s, l) => s + (l.weight || 0) * doneShare(l), 0) / weight) * 100;
+        const scheduled = members.some((l) => l.startMonth && l.endMonth);
+        return { group, weight, planned, actual, scheduled };
+      })
+      .filter(Boolean);
+  }, [items, leaves]);
+
+  // ─── Item BOQ ────────────────────────────────────────────────────────────
   const handleDeleteBoqItem = async (item) => {
-    const ok = await showConfirm(`Yakin hapus ${item.code} - ${item.description}?`, 'Hapus Item');
+    const ok = await showConfirm(`Hapus item ${item.code} — ${item.description}? Item yang sudah memiliki realisasi tidak dapat dihapus.`, 'Hapus item BOQ');
     if (!ok) return;
     try {
-      const res = await apiFetch(`/api/boq/item/${item.id}`, { method: 'DELETE' });
-      if (!res.ok) throw new Error('Gagal dari server');
-      await showAlert('Item berhasil dihapus', 'Sukses');
-      setUploadMsg(null);
-      loadData();
-    } catch(e) {
-      await showAlert('Gagal hapus item', 'Error');
+      await apiFetch(`/api/boq/item/${item.id}`, { method: 'DELETE' });
+      setMessage({ type: 'success', text: `Item ${item.code} dihapus.` });
+      await loadData();
+    } catch (e) {
+      await showAlert(e.message, 'Gagal');
     }
   };
 
-  
-  const saveNewItem = async (e) => {
+  const saveItem = async (e) => {
     e.preventDefault();
+    setSavingItem(true);
     try {
-      const res = await apiFetch('/api/boq/item', {
-        method: 'POST',
+      const body = { code: itemForm.code, description: itemForm.description, totalPrice: parseFloat(itemForm.totalPrice) || 0 };
+      await apiFetch(itemForm.id ? `/api/boq/item/${itemForm.id}` : '/api/boq/item', {
+        method: itemForm.id ? 'PUT' : 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          projectId: selectedProjectId,
-          code: newItem.code,
-          description: newItem.description,
-          totalPrice: parseFloat(newItem.totalPrice) || 0
-        })
+        body: JSON.stringify(itemForm.id ? body : { ...body, projectId: selectedProjectId }),
       });
-
-      if (!res.ok) throw new Error('Gagal menambahkan item BOQ');
-      
-      await loadData(); // refresh all data including summary
-      setNewItem({ code: '', description: '', totalPrice: '' });
-      setIsAddingItem(false);
-      showAlert('Item berhasil ditambahkan', 'Sukses');
+      setMessage({ type: 'success', text: itemForm.id ? `Item ${body.code} diperbarui.` : `Item ${body.code} ditambahkan.` });
+      setItemForm(null);
+      await loadData();
     } catch (err) {
-      console.error(err);
-      showAlert(err.message, 'Error');
+      await showAlert(err.message, 'Gagal');
+    } finally {
+      setSavingItem(false);
     }
   };
 
-  const saveItemEdit = async (e) => {
-    e.preventDefault();
-    try {
-      const res = await apiFetch(`/api/boq/item/${editingItem.id}`, {
-        method: 'PUT',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          code: editingItem.code,
-          description: editingItem.description,
-          totalPrice: parseFloat(editingItem.totalPrice) || 0
-        })
-      });
-      if (res.ok) {
-        setEditingItem(null);
-        setUploadMsg(null);
-        await showAlert('Item berhasil diperbarui', 'Sukses');
-        loadData();
-      } else {
-        throw new Error('Gagal update item');
-      }
-    } catch(err) {
-      await showAlert(err.message, 'Error');
+  // ─── Upload BOQ ──────────────────────────────────────────────────────────
+  const uploadFile = async (file) => {
+    if (!file || !selectedProjectId || readOnly) return;
+    if (!/\.xlsx?$/i.test(file.name)) {
+      setMessage({ type: 'error', text: 'Format file harus .xlsx atau .xls.' });
+      return;
     }
-  };
-
-  // ─── Upload BOQ ────────────────────────────────────────────────
-  const handleUpload = async (e) => {
-    const file = e.target.files?.[0];
-    if (!file || !selectedProjectId) return;
+    if (file.size > 4 * 1024 * 1024) {
+      setMessage({ type: 'error', text: 'Ukuran file melebihi batas 4 MB.' });
+      return;
+    }
     setUploading(true);
-    setUploadMsg(null);
+    setMessage(null);
     try {
       const fd = new FormData();
       fd.append('projectId', selectedProjectId);
@@ -191,22 +212,30 @@ export default function SCurveClient({ projects, user }) {
       const res = await apiFetch('/api/boq/upload', { method: 'POST', body: fd });
       const json = await res.json();
       if (json.success) {
-        setUploadMsg({ type: 'success', text: `${json.count} item BOQ berhasil diimpor` });
+        setMessage({ type: 'success', text: `${json.count} item BOQ berhasil diimpor. Lanjutkan dengan mengisi jadwal item.` });
         await loadData();
         setActiveTab('schedule');
       } else {
-        setUploadMsg({ type: 'error', text: `${json.error}` });
+        setMessage({ type: 'error', text: `${json.error}` });
       }
     } catch (err) {
-      setUploadMsg({ type: 'error', text: `${err.message}` });
+      setMessage({ type: 'error', text: `${err.message}` });
     } finally {
       setUploading(false);
       if (fileInputRef.current) fileInputRef.current.value = '';
     }
   };
 
-  // ─── Save Schedule ─────────────────────────────────────────────
+  // ─── Simpan jadwal ───────────────────────────────────────────────────────
   const saveSchedule = async () => {
+    const invalid = leaves.find((l) => {
+      const v = scheduleEdits[l.id];
+      return v?.startMonth && v?.endMonth && v.endMonth < v.startMonth;
+    });
+    if (invalid) {
+      await showAlert(`Bulan selesai untuk ${invalid.code} lebih awal dari bulan mulai.`, 'Periksa jadwal');
+      return;
+    }
     setSavingSchedule(true);
     try {
       const updates = Object.entries(scheduleEdits)
@@ -218,520 +247,439 @@ export default function SCurveClient({ projects, user }) {
       });
       const json = await res.json();
       if (json.success) {
-        setUploadMsg({ type: 'success', text: `Jadwal ${json.updated} item tersimpan` });
+        setMessage({ type: 'success', text: `Jadwal ${json.updated} item tersimpan.` });
         await loadData();
       }
     } catch (e) {
-      setUploadMsg({ type: 'error', text: `${e.message}` });
+      setMessage({ type: 'error', text: `${e.message}` });
     } finally {
       setSavingSchedule(false);
     }
   };
 
-  const tabs = [
-    { id: 'scurve', label: 'Kurva S', icon: Activity },
-    { id: 'boq', label: 'Upload BOQ', icon: Upload },
-    { id: 'schedule', label: 'Jadwal Item', icon: Calendar },
-    { id: 'actual', label: 'Input Realisasi', icon: Table2 },
-    { id: 'report', label: 'Laporan', icon: BarChart2 },
-  ];
+  const saveActual = async (item, edit) => {
+    const progress = parseFloat(edit.progressPct) || 0;
+    if (progress < 0 || progress > 100) {
+      await showAlert('Persentase kemajuan harus di antara 0 dan 100.', 'Periksa kembali');
+      return;
+    }
+    setSavingActual(item.id);
+    try {
+      await apiFetch('/api/boq/actual', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ boqItemId: item.id, projectId: selectedProjectId, month: selectedMonth, progressPct: progress, costActual: parseFloat(edit.costActual) || 0, notes: edit.notes }),
+      });
+      setMessage({ type: 'success', text: `Realisasi ${item.code} bulan ${fmtMonth(selectedMonth)} tersimpan.` });
+      await loadData();
+    } catch (error) {
+      await showAlert(error.message, 'Gagal menyimpan realisasi');
+    } finally {
+      setSavingActual(null);
+    }
+  };
 
-  const hasBoq = data?.boqItems?.length > 0;
-  const scheduledPct = hasBoq
-    ? Math.round((data.boqItems.filter(i => i.startMonth && i.endMonth).length / data.boqItems.length) * 100)
-    : 0;
+  if (!projects?.length) {
+    return (
+      <div className="card empty-state">
+        <FileSpreadsheet aria-hidden />
+        <h3>Belum ada proyek</h3>
+        <p>Tambahkan proyek di menu Proyek sebelum mengelola BOQ dan kurva S.</p>
+      </div>
+    );
+  }
 
   return (
-    <div className="page-container">
-      {/* Header */}
-      <div className="page-header" style={{ marginBottom: 20 }}>
-        <div className="page-header-text">
-          <h1 style={{ fontSize: 22, fontWeight: 700, color: 'var(--navy-800)' }}>S-Curve & Progress</h1>
-          <p style={{ fontSize: 13, color: 'var(--gray-500)', marginTop: 2 }}>
-            Monitoring rencana vs realisasi berbasis BOQ
-          </p>
-        </div>
-        <div className="page-header-actions">
-          <select
-            value={selectedProjectId}
-            onChange={e => setSelectedProjectId(e.target.value)}
-            className="form-input"
-            style={{ width: 260, height: 38, fontSize: 13 }}
-          >
-            {projects?.map(p => (
+    <div className="stack">
+      <div className="toolbar">
+        <div className="form-group" style={{ flex: '1 1 320px', maxWidth: 480 }}>
+          <label className="form-label" htmlFor="sc-project">Proyek</label>
+          <select id="sc-project" value={selectedProjectId} onChange={(e) => { setSelectedProjectId(e.target.value); setMessage(null); }} className="form-select">
+            {projects.map((p) => (
               <option key={p.id} value={p.id}>{p.code} — {p.name}</option>
             ))}
           </select>
-          <button className="btn btn-outline" onClick={loadData} disabled={loading} style={{ height: 38 }}>
-            <RefreshCw size={14} style={{ marginRight: 6, animation: loading ? 'spin 1s linear infinite' : 'none' }} />
-            Refresh
-          </button>
         </div>
+        <button className="btn btn-outline" onClick={loadData} disabled={loading}>
+          <RefreshCw className={loading ? 'spin' : ''} aria-hidden /> Muat ulang
+        </button>
+        {readOnly && <span className="badge badge-gray" style={{ alignSelf: 'center' }}>Mode lihat saja</span>}
       </div>
 
-      {/* Summary KPIs */}
       {selectedProject && (
-        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(4,1fr)', gap: 12, marginBottom: 20 }}>
-          {[
-            { label: 'Nilai Kontrak', value: fmtIDR(selectedProject.contractValue), color: 'navy', sub: selectedProject.client },
-            { label: 'Item BOQ', value: hasBoq ? `${data.boqItems.length} item` : 'Belum upload', color: 'orange', sub: hasBoq ? `${data.summary?.totalWeight}% total bobot` : 'Upload file .xlsx' },
-            { label: 'Terjadwal', value: hasBoq ? `${scheduledPct}%` : '-', color: 'green', sub: hasBoq ? `${data.boqItems.filter(i=>i.startMonth&&i.endMonth).length} dari ${data.boqItems.length} item` : '-' },
-            { label: 'Progress Plan', value: data?.scurveData?.length ? `${data.scurveData[data.scurveData.length-1]?.planned?.toFixed(1)}%` : '-', color: 'blue', sub: 'Hingga akhir jadwal' },
-          ].map((kpi, i) => (
-            <div key={i} className={`kpi-card ${kpi.color}`}>
-              <div className="kpi-label">{kpi.label}</div>
-              <div className="kpi-value">{kpi.value}</div>
-              <div className="kpi-trend">{kpi.sub}</div>
-            </div>
-          ))}
+        <div className="kpi-grid">
+          <div className="kpi-card navy">
+            <div className="kpi-label">Nilai kontrak</div>
+            <div className="kpi-value">{fmtIDR(selectedProject.contractValue)}</div>
+            <div className="kpi-trend">{selectedProject.client || '-'}</div>
+          </div>
+          <div className="kpi-card orange">
+            <div className="kpi-label">Item BOQ (detail)</div>
+            <div className="kpi-value">{hasBoq ? `${leaves.length} item` : 'Belum ada'}</div>
+            <div className="kpi-trend">{hasBoq ? `Total bobot ${data.summary?.totalWeight}%` : 'Unggah file .xlsx'}</div>
+          </div>
+          <div className="kpi-card green">
+            <div className="kpi-label">Terjadwal</div>
+            <div className="kpi-value">{hasBoq ? `${scheduledPct}%` : '-'}</div>
+            <div className="kpi-trend">{hasBoq ? `${scheduledCount} dari ${leaves.length} item detail` : '-'}</div>
+          </div>
+          <div className="kpi-card blue">
+            <div className="kpi-label">Rencana kumulatif</div>
+            <div className="kpi-value">{lastPlan != null ? pct(lastPlan) : '-'}</div>
+            <div className="kpi-trend">hingga akhir jadwal</div>
+          </div>
         </div>
       )}
 
-      {/* Tabs */}
-      <div className="card" style={{ overflow: 'hidden' }}>
-        <div style={{ display:'flex', borderBottom:'1px solid var(--gray-200)', background:'var(--gray-50)', overflowX:'auto', scrollbarWidth:'none' }}>
-          {tabs.map(tab => {
+      <div className="card">
+        <div className="tabs" role="tablist">
+          {TABS.map((tab) => {
             const Icon = tab.icon;
-            const isActive = activeTab === tab.id;
             return (
-              <button key={tab.id} onClick={() => setActiveTab(tab.id)} style={{
-                padding:'13px 20px', fontWeight:600, fontSize:13,
-                color: isActive ? 'var(--navy-800)' : 'var(--gray-500)',
-                display:'flex', alignItems:'center', gap:7, background:'transparent',
-                border:'none', cursor:'pointer', whiteSpace:'nowrap', flexShrink:0,
-                borderBottom: isActive ? '3px solid var(--orange-500)' : '3px solid transparent',
-                transition:'all 0.2s',
-              }}>
-                <Icon size={15} style={{ color: isActive ? 'var(--orange-500)' : 'var(--gray-400)' }} />
-                {tab.label}
+              <button key={tab.id} role="tab" aria-selected={activeTab === tab.id} className={`tab ${activeTab === tab.id ? 'active' : ''}`} onClick={() => setActiveTab(tab.id)}>
+                <Icon aria-hidden /> {tab.label}
               </button>
             );
           })}
         </div>
 
-        {/* Upload message */}
-        {uploadMsg && (
-          <div style={{ padding:'10px 20px', background: uploadMsg.type==='success' ? 'var(--green-50)' : 'var(--red-50)', borderBottom:'1px solid var(--gray-100)', fontSize:13, color: uploadMsg.type==='success' ? 'var(--green-700)' : 'var(--red-600)' }}>
-            {uploadMsg.text}
+        {message && (
+          <div className={`alert ${message.type === 'success' ? 'alert-success' : 'alert-danger'}`} style={{ margin: '16px 20px 0' }}>
+            {message.type === 'success' ? <CheckCircle aria-hidden /> : <Info aria-hidden />}
+            <span style={{ flex: 1 }}>{message.text}</span>
+            <button className="btn-ghost" style={{ minHeight: 0, padding: '0 6px' }} onClick={() => setMessage(null)} aria-label="Tutup pesan">✕</button>
           </div>
         )}
 
-        <AnimatePresence mode="wait">
-          {/* TAB: KURVA-S */}
-          {activeTab === 'scurve' && (
-            <motion.div key="scurve" initial={{opacity:0,y:8}} animate={{opacity:1,y:0}} exit={{opacity:0}} transition={{duration:0.2}} style={{ padding: 24 }}>
-              {loading ? (
-                <div style={{ textAlign:'center', padding:60, color:'var(--gray-400)' }}>
-                  <Loader2 size={32} style={{ animation:'spin 1s linear infinite', margin:'0 auto 12px' }} />
-                  <div>Memuat data...</div>
-                </div>
-              ) : !hasBoq ? (
-                <div style={{ textAlign:'center', padding:60 }}>
-                  <FileSpreadsheet size={48} style={{ color:'var(--gray-300)', margin:'0 auto 16px' }} />
-                  <div style={{ fontWeight:600, color:'var(--gray-600)', marginBottom:8 }}>Belum ada data BOQ</div>
-                  <div style={{ color:'var(--gray-400)', fontSize:13, marginBottom:20 }}>Upload file BOQ.xlsx terlebih dahulu di tab &quot;Upload BOQ&quot;</div>
-                  <button className="btn btn-primary" onClick={() => setActiveTab('boq')}>
-                    <Upload size={14} style={{ marginRight:6 }} /> Upload BOQ
-                  </button>
-                </div>
-              ) : data?.scurveData?.length === 0 ? (
-                <div style={{ textAlign:'center', padding:60 }}>
-                  <Calendar size={48} style={{ color:'var(--gray-300)', margin:'0 auto 16px' }} />
-                  <div style={{ fontWeight:600, color:'var(--gray-600)', marginBottom:8 }}>Jadwal belum diisi</div>
-                  <div style={{ color:'var(--gray-400)', fontSize:13, marginBottom:20 }}>Isi bulan mulai & selesai per item di tab &quot;Jadwal Item&quot; untuk generate kurva-S</div>
-                  <button className="btn btn-primary" onClick={() => setActiveTab('schedule')}>
-                    <Calendar size={14} style={{ marginRight:6 }} /> Atur Jadwal
-                  </button>
-                </div>
-              ) : (
-                <>
-                  <div style={{ marginBottom:16, display:'flex', alignItems:'center', justifyContent:'space-between', flexWrap:'wrap', gap:12 }}>
-                    <div style={{ fontWeight:600, fontSize:15, color:'var(--navy-800)' }}>Kurva S — Plan vs Aktual</div>
-                    <div style={{ display:'flex', gap:20, fontSize:12 }}>
-                      <span style={{ display:'flex', alignItems:'center', gap:6 }}><span style={{ width:24, height:3, background:'var(--navy-600)', display:'inline-block', borderRadius:2 }}></span> Rencana</span>
-                      <span style={{ display:'flex', alignItems:'center', gap:6 }}><span style={{ width:24, height:3, background:'var(--orange-500)', display:'inline-block', borderRadius:2, borderTop:'2px dashed var(--orange-500)' }}></span> Aktual</span>
-                    </div>
+        {loading && !data ? (
+          <div className="loading-block"><Loader2 size={30} className="spin" /> Memuat data…</div>
+        ) : (
+          <>
+            {/* TAB: KURVA-S */}
+            {activeTab === 'scurve' && (
+              <div className="card-body">
+                {!hasBoq ? <NeedBoq onGo={() => setActiveTab('boq')} /> : !data?.scurveData?.length ? (
+                  <div className="empty-state">
+                    <Calendar aria-hidden />
+                    <h3>Jadwal belum diisi</h3>
+                    <p>Isi bulan mulai dan selesai untuk setiap item detail di tab &quot;Jadwal item&quot; agar kurva S terbentuk.</p>
+                    <button className="btn btn-primary" onClick={() => setActiveTab('schedule')}><Calendar aria-hidden /> Atur jadwal</button>
                   </div>
-                  <ResponsiveContainer width="100%" height={360}>
-                    <ComposedChart data={data.scurveData} margin={{ top:5, right:20, left:0, bottom:5 }}>
-                      <CartesianGrid strokeDasharray="3 3" stroke="var(--gray-100)" />
-                      <XAxis dataKey="month" tickFormatter={fmtMonth} tick={{ fontSize:11, fill:'var(--gray-500)' }} />
-                      <YAxis tickFormatter={v => `${v}%`} tick={{ fontSize:11, fill:'var(--gray-500)' }} domain={[0, 100]} />
-                      <Tooltip content={<CustomTooltip />} />
-                      <ReferenceLine y={100} stroke="var(--gray-200)" strokeDasharray="4 2" />
-                      <Area type="monotone" dataKey="planned" fill="rgba(30,58,138,0.05)" stroke="var(--navy-600)" strokeWidth={2.5} name="Rencana" dot={false} />
-                      <Line type="monotone" dataKey="actual" stroke="var(--orange-500)" strokeWidth={2.5} strokeDasharray="6 3" name="Aktual" dot={{ r:4, fill:'var(--orange-500)' }} connectNulls={false} />
-                    </ComposedChart>
-                  </ResponsiveContainer>
-
-                  {/* Deviation summary */}
-                  {data.scurveData.some(d => d.actual != null) && (
-                    <div style={{ marginTop:24, display:'grid', gridTemplateColumns:'repeat(3,1fr)', gap:12 }}>
-                      {(() => {
-                        const last = [...data.scurveData].reverse().find(d => d.actual != null);
-                        const deviation = last ? last.actual - last.planned : 0;
-                        return [
-                          { label:'Plan Kumulatif', value:`${data.scurveData[data.scurveData.length-1]?.planned?.toFixed(1)}%`, color:'var(--navy-700)' },
-                          { label:'Aktual Kumulatif', value: last ? `${last.actual.toFixed(1)}%` : '-', color:'var(--orange-500)' },
-                          { label:'Deviasi', value: last ? `${deviation > 0 ? '+' : ''}${deviation.toFixed(1)}%` : '-', color: deviation >= 0 ? 'var(--green-600)' : 'var(--red-600)' },
-                        ].map((s, i) => (
-                          <div key={i} style={{ background:'var(--gray-50)', borderRadius:'var(--radius-md)', padding:'12px 16px', textAlign:'center' }}>
-                            <div style={{ fontSize:11, color:'var(--gray-500)', marginBottom:4 }}>{s.label}</div>
-                            <div style={{ fontSize:20, fontWeight:700, color:s.color }}>{s.value}</div>
-                          </div>
-                        ));
-                      })()}
+                ) : (
+                  <>
+                    <div style={{ marginBottom: 16, display: 'flex', alignItems: 'center', justifyContent: 'space-between', flexWrap: 'wrap', gap: 12 }}>
+                      <h3 style={{ fontSize: 16 }}>Kurva S — rencana vs realisasi</h3>
+                      <div className="chart-legend" style={{ margin: 0 }}>
+                        <span className="legend-item"><span className="legend-line" style={{ background: 'var(--chart-1)' }} /> Rencana</span>
+                        <span className="legend-item"><span className="legend-line" style={{ background: 'var(--chart-2)' }} /> Realisasi</span>
+                      </div>
                     </div>
-                  )}
-                </>
-              )}
-            </motion.div>
-          )}
-
-          {/* TAB: UPLOAD BOQ */}
-          {activeTab === 'boq' && (
-            <motion.div key="boq" initial={{opacity:0,y:8}} animate={{opacity:1,y:0}} exit={{opacity:0}} transition={{duration:0.2}} style={{ padding:24 }}>
-              <div style={{ maxWidth:560 }}>
-                <div style={{ fontWeight:600, fontSize:15, color:'var(--navy-800)', marginBottom:4 }}>Upload File BOQ (.xlsx)</div>
-                <div style={{ fontSize:13, color:'var(--gray-500)', marginBottom:24 }}>
-                  File Excel harus menggunakan format standar Prohaba (Contoh BOQ.xlsx). Sistem akan otomatis parsing hierarki item, volume, harga, dan menghitung bobot berdasarkan nilai kontrak proyek.
-                </div>
-
-                <div
-                  disabled={readOnly} onClick={() => fileInputRef.current?.click()}
-                  style={{
-                    border:'2px dashed var(--gray-300)', borderRadius:'var(--radius-lg)',
-                    padding:'40px 32px', textAlign:'center', cursor:'pointer',
-                    background:'var(--gray-50)', transition:'all 0.2s',
-                  }}
-                  onMouseEnter={e => { e.currentTarget.style.borderColor = 'var(--orange-400)'; e.currentTarget.style.background = 'var(--orange-50)'; }}
-                  onMouseLeave={e => { e.currentTarget.style.borderColor = 'var(--gray-300)'; e.currentTarget.style.background = 'var(--gray-50)'; }}
-                >
-                  {uploading ? (
-                    <Loader2 size={36} style={{ color:'var(--orange-500)', animation:'spin 1s linear infinite', margin:'0 auto 12px' }} />
-                  ) : (
-                    <FileSpreadsheet size={36} style={{ color:'var(--orange-500)', margin:'0 auto 12px' }} />
-                  )}
-                  <div style={{ fontWeight:600, color:'var(--gray-700)', marginBottom:6 }}>
-                    {uploading ? 'Memproses...' : 'Klik untuk pilih file atau drag & drop'}
-                  </div>
-                  <div style={{ fontSize:12, color:'var(--gray-400)' }}>Format .xlsx, maksimal 10MB</div>
-                  <input ref={fileInputRef} type="file" accept=".xlsx,.xls" style={{ display:'none' }} onChange={handleUpload} />
-                </div>
-
-                {hasBoq && (
-                  <div style={{ marginTop:20, padding:'12px 16px', background:'var(--green-50)', borderRadius:'var(--radius-md)', border:'1px solid var(--green-200)', display:'flex', alignItems:'center', gap:10 }}>
-                    <CheckCircle size={18} style={{ color:'var(--green-600)', flexShrink:0 }} />
-                    <div>
-                      <div style={{ fontWeight:600, fontSize:13, color:'var(--green-700)' }}>BOQ sudah tersedia</div>
-                      <div style={{ fontSize:12, color:'var(--green-600)' }}>{data.boqItems.length} item, total bobot {data.summary?.totalWeight}%</div>
+                    <div style={{ width: '100%', height: 360 }}>
+                      <ResponsiveContainer width="100%" height="100%">
+                        <ComposedChart data={data.scurveData} margin={{ top: 5, right: 16, left: 0, bottom: 5 }}>
+                          <CartesianGrid strokeDasharray="3 3" stroke="#e3e6eb" vertical={false} />
+                          <XAxis dataKey="month" tickFormatter={fmtMonth} tick={{ fontSize: 12, fill: '#646d79' }} />
+                          <YAxis tickFormatter={(v) => `${v}%`} tick={{ fontSize: 12, fill: '#646d79' }} domain={[0, 100]} width={48} />
+                          <Tooltip content={<CustomTooltip />} />
+                          <ReferenceLine y={100} stroke="#ccd1d9" strokeDasharray="4 2" />
+                          <Area type="monotone" dataKey="planned" fill="rgba(0,96,176,0.08)" stroke="#0060b0" strokeWidth={2.5} name="Rencana" dot={false} />
+                          <Line type="monotone" dataKey="actual" stroke="#f07820" strokeWidth={2.5} name="Realisasi" dot={{ r: 3.5, fill: '#f07820' }} connectNulls={false} />
+                        </ComposedChart>
+                      </ResponsiveContainer>
                     </div>
-                    <button className="btn btn-outline" style={{ marginLeft:'auto', fontSize:12, height:30 }} onClick={() => setActiveTab('schedule')}>
-                      Atur Jadwal →
-                    </button>
-                  </div>
+
+                    {data.scurveData.some((d) => d.actual) && (() => {
+                      const current = businessToday().slice(0, 7);
+                      const upto = data.scurveData.filter((d) => d.month <= current);
+                      const last = upto[upto.length - 1] ?? data.scurveData[0];
+                      const deviation = last.actual - last.planned;
+                      return (
+                        <div className="grid-3" style={{ marginTop: 20 }}>
+                          {[
+                            { label: `Rencana s.d. ${fmtMonth(last.month)}`, value: pct(last.planned), color: 'var(--brand-700)' },
+                            { label: `Realisasi s.d. ${fmtMonth(last.month)}`, value: pct(last.actual), color: 'var(--accent-600)' },
+                            { label: 'Deviasi', value: `${deviation > 0 ? '+' : ''}${pct(deviation)}`, color: deviation >= 0 ? 'var(--green-600)' : 'var(--red-600)' },
+                          ].map((s) => (
+                            <div key={s.label} style={{ background: 'var(--gray-50)', borderRadius: 'var(--radius-md)', padding: '14px 16px', textAlign: 'center' }}>
+                              <div style={{ fontSize: 13, color: 'var(--gray-500)', marginBottom: 4 }}>{s.label}</div>
+                              <div style={{ fontSize: 22, fontWeight: 600, color: s.color }}>{s.value}</div>
+                            </div>
+                          ))}
+                        </div>
+                      );
+                    })()}
+                  </>
                 )}
+              </div>
+            )}
 
-                <div style={{ marginTop:24, padding:'14px 16px', background:'var(--navy-50)', borderRadius:'var(--radius-md)', border:'1px solid var(--navy-100)' }}>
-                  <div style={{ display:'flex', alignItems:'center', gap:8, marginBottom:8 }}>
-                    <Info size={14} style={{ color:'var(--navy-600)' }} />
-                    <span style={{ fontWeight:600, fontSize:13, color:'var(--navy-700)' }}>Format Kolom yang Dikenali</span>
+            {/* TAB: UPLOAD BOQ */}
+            {activeTab === 'boq' && (
+              <div className="card-body">
+                <div style={{ maxWidth: 620 }}>
+                  <h3 style={{ fontSize: 16, marginBottom: 4 }}>Unggah file BOQ (.xlsx)</h3>
+                  <p className="muted" style={{ fontSize: 14, marginBottom: 20 }}>
+                    Gunakan format standar Prohaba (lihat Contoh BOQ.xlsx). Sistem membaca hierarki item, volume, harga, lalu menghitung bobot berdasarkan nilai kontrak proyek.
+                    Mengunggah ulang akan mengganti item yang belum memiliki realisasi.
+                  </p>
+
+                  <div
+                    role="button"
+                    tabIndex={readOnly ? -1 : 0}
+                    aria-disabled={readOnly}
+                    className={`dropzone ${dragging ? 'dragging' : ''} ${readOnly ? 'disabled' : ''}`}
+                    onClick={() => !readOnly && !uploading && fileInputRef.current?.click()}
+                    onKeyDown={(e) => (e.key === 'Enter' || e.key === ' ') && !readOnly && fileInputRef.current?.click()}
+                    onDragOver={(e) => { e.preventDefault(); if (!readOnly) setDragging(true); }}
+                    onDragLeave={() => setDragging(false)}
+                    onDrop={(e) => { e.preventDefault(); setDragging(false); uploadFile(e.dataTransfer.files?.[0]); }}
+                  >
+                    {uploading ? <Loader2 size={34} className="spin" /> : <FileSpreadsheet size={34} />}
+                    <strong>{uploading ? 'Memproses file…' : readOnly ? 'Peran Anda tidak dapat mengunggah BOQ' : 'Klik untuk memilih file, atau seret file ke sini'}</strong>
+                    <span>Format .xlsx / .xls, maksimal 4 MB</span>
+                    <input ref={fileInputRef} type="file" accept=".xlsx,.xls" hidden onChange={(e) => uploadFile(e.target.files?.[0])} />
                   </div>
-                  <div style={{ fontSize:12, color:'var(--navy-600)', lineHeight:1.8 }}>
-                    NO · URAIAN PEKERJAAN · VOLUME · SATUAN · HARGA BAHAN · HARGA UPAH · JUMLAH BAHAN · JUMLAH UPAH · TOTAL PRICE
+
+                  {hasBoq && (
+                    <div className="alert alert-success" style={{ marginTop: 16, alignItems: 'center' }}>
+                      <CheckCircle aria-hidden />
+                      <div style={{ flex: 1 }}>
+                        <strong>BOQ sudah tersedia</strong>
+                        <div style={{ fontSize: 13.5 }}>{leaves.length} item detail, total bobot {data.summary?.totalWeight}%</div>
+                      </div>
+                      <button className="btn btn-outline btn-sm" onClick={() => setActiveTab('schedule')}>Atur jadwal →</button>
+                    </div>
+                  )}
+
+                  <div className="alert alert-info" style={{ marginTop: 16 }}>
+                    <Info aria-hidden />
+                    <div>
+                      <strong>Kolom yang dikenali</strong>
+                      <div style={{ fontSize: 13.5, marginTop: 2 }}>NO · URAIAN PEKERJAAN · VOLUME · SATUAN · HARGA BAHAN · HARGA UPAH · JUMLAH BAHAN · JUMLAH UPAH · TOTAL PRICE</div>
+                    </div>
                   </div>
                 </div>
               </div>
-            </motion.div>
-          )}
+            )}
 
-          {/* TAB: JADWAL ITEM */}
-          {activeTab === 'schedule' && (
-            <motion.div key="schedule" initial={{opacity:0,y:8}} animate={{opacity:1,y:0}} exit={{opacity:0}} transition={{duration:0.2}}>
-              {!hasBoq ? (
-                <div style={{ padding:40, textAlign:'center', color:'var(--gray-400)' }}>
-                  Upload BOQ terlebih dahulu
+            {/* TAB: JADWAL ITEM */}
+            {activeTab === 'schedule' && (!hasBoq ? <div className="card-body"><NeedBoq onGo={() => setActiveTab('boq')} /></div> : (
+              <>
+                <div className="toolbar" style={{ padding: '16px 20px', borderBottom: '1px solid var(--gray-200)' }}>
+                  <p className="muted" style={{ fontSize: 14, flex: '1 1 260px' }}>Isi bulan mulai dan selesai untuk setiap item detail. Baris kelompok dihitung otomatis.</p>
+                  <button className="btn btn-outline" disabled={readOnly} onClick={() => setItemForm({ code: '', description: '', totalPrice: '' })}>
+                    <Plus aria-hidden /> Tambah item
+                  </button>
+                  <button className="btn btn-primary" onClick={saveSchedule} disabled={readOnly || savingSchedule}>
+                    {savingSchedule ? <Loader2 className="spin" aria-hidden /> : <Save aria-hidden />} Simpan jadwal
+                  </button>
                 </div>
-              ) : (
-                <>
-                  <div style={{ padding:'14px 20px', borderBottom:'1px solid var(--gray-100)', display:'flex', alignItems:'center', justifyContent:'space-between', flexWrap:'wrap', gap:12 }}>
-                    <div style={{ fontSize:13, color:'var(--gray-600)' }}>Atur bulan mulai & selesai per item.</div>
-                    <div style={{ display:'flex', gap:12, alignItems:'center' }}>
-                      <button className="btn btn-outline" disabled={readOnly} onClick={() => setIsAddingItem(true)} style={{ height:36 }}>
-                        <Plus size={14} style={{ marginRight:6 }} />
-                        Tambah Item
-                      </button>
-                      <button className="btn btn-primary" onClick={saveSchedule} disabled={readOnly || savingSchedule} style={{ height:36 }}>
-                      {savingSchedule ? <Loader2 size={14} style={{ animation:'spin 1s linear infinite', marginRight:6 }} /> : <Save size={14} style={{ marginRight:6 }} />}
-                      Simpan Jadwal
-                    </button>
-                    </div>
-                  </div>
-                  <div style={{ overflowX:'auto' }}>
-                    <table style={{ width:'100%', borderCollapse:'collapse', fontSize:12.5 }}>
-                      <thead>
-                        <tr style={{ background:'var(--gray-50)', borderBottom:'1px solid var(--gray-200)' }}>
-                          <th style={{ padding:'10px 16px', textAlign:'left', color:'var(--gray-500)', fontWeight:600, fontSize:11 }}>URAIAN PEKERJAAN</th>
-                          <th style={{ padding:'10px 12px', textAlign:'right', color:'var(--gray-500)', fontWeight:600, fontSize:11 }}>TOTAL PRICE</th>
-                          <th style={{ padding:'10px 12px', textAlign:'center', color:'var(--gray-500)', fontWeight:600, fontSize:11 }}>BOBOT %</th>
-                          <th style={{ padding:'10px 12px', textAlign:'center', color:'var(--gray-500)', fontWeight:600, fontSize:11 }}>BULAN MULAI</th>
-                          <th style={{ padding:'10px 12px', textAlign:'center', color:'var(--gray-500)', fontWeight:600, fontSize:11 }}>BULAN SELESAI</th>
-                          <th style={{ padding:'10px 12px', textAlign:'center', color:'var(--gray-500)', fontWeight:600, fontSize:11 }}>AKSI</th>
+                <div className="table-wrapper">
+                  <table>
+                    <thead>
+                      <tr>
+                        <th>Uraian pekerjaan</th>
+                        <th className="num">Total harga</th>
+                        <th className="num">Bobot</th>
+                        <th>Bulan mulai</th>
+                        <th>Bulan selesai</th>
+                        <th className="num">Aksi</th>
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {items.map((item) => (
+                        <tr key={item.id} style={{ background: item.level === 1 ? 'var(--brand-50)' : undefined }}>
+                          <td style={{ paddingLeft: 16 + (levelIndent[item.level] ?? 48), minWidth: 280 }}>
+                            <span style={levelStyle[item.level] ?? levelStyle[4]}>{item.code}&nbsp; {item.description}</span>
+                          </td>
+                          <td className="num nowrap" style={{ fontWeight: item.level <= 2 ? 600 : 400 }}>{item.totalPrice ? fmtIDR(item.totalPrice) : '—'}</td>
+                          <td className="num nowrap" style={{ fontWeight: 600, color: 'var(--brand-700)' }}>{item.weight != null ? `${item.weight.toFixed(2)}%` : '—'}</td>
+                          <td style={{ padding: '8px 10px' }}>
+                            {item.isLeaf && (
+                              <input disabled={readOnly} type="month" className="form-input" aria-label={`Bulan mulai ${item.code}`} style={{ minHeight: 38, width: 160 }}
+                                value={scheduleEdits[item.id]?.startMonth || ''}
+                                onChange={(e) => setScheduleEdits((prev) => ({ ...prev, [item.id]: { ...prev[item.id], startMonth: e.target.value } }))}
+                              />
+                            )}
+                          </td>
+                          <td style={{ padding: '8px 10px' }}>
+                            {item.isLeaf && (
+                              <input disabled={readOnly} type="month" className="form-input" aria-label={`Bulan selesai ${item.code}`} style={{ minHeight: 38, width: 160 }}
+                                min={scheduleEdits[item.id]?.startMonth || undefined}
+                                value={scheduleEdits[item.id]?.endMonth || ''}
+                                onChange={(e) => setScheduleEdits((prev) => ({ ...prev, [item.id]: { ...prev[item.id], endMonth: e.target.value } }))}
+                              />
+                            )}
+                          </td>
+                          <td>
+                            <div className="row-actions">
+                              <button disabled={readOnly} onClick={() => setItemForm({ id: item.id, code: item.code || '', description: item.description || '', totalPrice: item.totalPrice ?? '' })} className="action-btn" title="Ubah item" aria-label={`Ubah ${item.code}`}>
+                                <Edit />
+                              </button>
+                              <button disabled={readOnly} onClick={() => handleDeleteBoqItem(item)} className="action-btn danger" title="Hapus item" aria-label={`Hapus ${item.code}`}>
+                                <Trash2 />
+                              </button>
+                            </div>
+                          </td>
                         </tr>
-                      </thead>
-                      <tbody>
-                        {data.boqItems.map((item) => (
-                          <tr key={item.id} style={{ borderBottom:'1px solid var(--gray-100)', background: item.level === 1 ? 'var(--navy-50)' : 'white' }}>
-                            <td style={{ padding:'8px 16px', paddingLeft: 16 + levelIndent[item.level] }}>
-                              <span style={levelStyle[item.level]}>{item.code} &nbsp;</span>
-                              <span style={levelStyle[item.level]}>{item.description}</span>
+                      ))}
+                    </tbody>
+                  </table>
+                </div>
+              </>
+            ))}
+
+            {/* TAB: INPUT REALISASI */}
+            {activeTab === 'actual' && (!hasBoq ? <div className="card-body"><NeedBoq onGo={() => setActiveTab('boq')} /></div> : (
+              <>
+                <div className="toolbar" style={{ padding: '16px 20px', borderBottom: '1px solid var(--gray-200)' }}>
+                  <div className="form-group" style={{ minWidth: 200 }}>
+                    <label className="form-label" htmlFor="sc-month">Bulan realisasi</label>
+                    <input id="sc-month" type="month" className="form-input" value={selectedMonth} onChange={(e) => setSelectedMonth(e.target.value)} />
+                  </div>
+                  <p className="muted" style={{ fontSize: 14, alignSelf: 'center', flex: '1 1 260px' }}>
+                    Isi persentase kemajuan setiap item untuk bulan {fmtMonth(selectedMonth)}, lalu tekan Simpan pada baris tersebut.
+                  </p>
+                </div>
+                <div className="table-wrapper">
+                  <table>
+                    <thead>
+                      <tr>
+                        <th>Uraian pekerjaan</th>
+                        <th className="num">Bobot</th>
+                        <th>% selesai bulan ini</th>
+                        <th>Biaya aktual (Rp)</th>
+                        <th>Catatan</th>
+                        <th className="num">Aksi</th>
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {leaves.map((item) => {
+                        const existing = item.actuals?.find((a) => a.month === selectedMonth);
+                        const editKey = selectedProjectId + ':' + selectedMonth + ':' + item.id;
+                        const edit = actualEdits[editKey] || { progressPct: existing?.progressPct ?? '', costActual: existing?.costActual ?? '', notes: existing?.notes ?? '' };
+                        const update = (key) => (e) => setActualEdits((prev) => ({ ...prev, [editKey]: { ...edit, [key]: e.target.value } }));
+                        return (
+                          <tr key={item.id}>
+                            <td style={{ minWidth: 260 }}>
+                              <span style={levelStyle[item.level] ?? levelStyle[4]}>{item.code} {item.description}</span>
+                              {item.startMonth && <div className="cell-sub">Jadwal {fmtMonth(item.startMonth)} – {fmtMonth(item.endMonth)}</div>}
                             </td>
-                            <td style={{ padding:'8px 12px', textAlign:'right', color:'var(--gray-700)', fontWeight: item.level<=2?600:400 }}>
-                              {item.totalPrice ? fmtIDR(item.totalPrice) : '—'}
-                            </td>
-                            <td style={{ padding:'8px 12px', textAlign:'center' }}>
-                              {item.weight != null ? (
-                                <span style={{ fontWeight:600, color:'var(--navy-700)' }}>{item.weight.toFixed(2)}%</span>
-                              ) : '—'}
-                            </td>
-                            <td style={{ padding:'6px 8px' }}>
-                              {item.level >= 2 && (
-                                <input disabled={readOnly} type="month" className="form-input" style={{ fontSize:12, height:30, padding:'0 8px', width:140 }}
-                                  value={scheduleEdits[item.id]?.startMonth || ''}
-                                  onChange={e => setScheduleEdits(prev => ({ ...prev, [item.id]: { ...prev[item.id], startMonth: e.target.value } }))}
-                                />
-                              )}
-                            </td>
-                            <td style={{ padding:'6px 8px' }}>
-                              {item.level >= 2 && (
-                                <input disabled={readOnly} type="month" className="form-input" style={{ fontSize:12, height:30, padding:'0 8px', width:140 }}
-                                  value={scheduleEdits[item.id]?.endMonth || ''}
-                                  onChange={e => setScheduleEdits(prev => ({ ...prev, [item.id]: { ...prev[item.id], endMonth: e.target.value } }))}
-                                />
-                              )}
-                            </td>
-                            <td style={{ padding:'6px 8px', textAlign:'center' }}>
-                              <div style={{ display: 'flex', gap: 4, justifyContent: 'center' }}>
-                                <button disabled={readOnly} onClick={() => setEditingItem(item)} className="btn btn-sm btn-outline" style={{ padding: 4, height: 26, width: 26, display:'flex', alignItems:'center', justifyContent:'center' }} title="Edit Item">
-                                  <Edit size={12} />
-                                </button>
-                                <button disabled={readOnly} onClick={() => handleDeleteBoqItem(item)} className="btn btn-sm btn-outline" style={{ padding: 4, height: 26, width: 26, color: 'var(--red-500)', borderColor: 'var(--red-200)', display:'flex', alignItems:'center', justifyContent:'center' }} title="Hapus Item">
-                                  <Trash2 size={12} />
-                                </button>
+                            <td className="num nowrap" style={{ color: 'var(--brand-700)', fontWeight: 600 }}>{item.weight != null ? `${item.weight.toFixed(2)}%` : '—'}</td>
+                            <td style={{ padding: '8px 10px' }}>
+                              <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
+                                <input disabled={readOnly} type="number" min="0" max="100" step="0.5" className="form-input" placeholder="0" aria-label={`Persen selesai ${item.code}`}
+                                  style={{ width: 90, minHeight: 38, textAlign: 'right' }} value={edit.progressPct} onChange={update('progressPct')} />
+                                <span className="muted">%</span>
                               </div>
                             </td>
+                            <td style={{ padding: '8px 10px' }}>
+                              <input disabled={readOnly} type="number" min="0" className="form-input" placeholder="0" aria-label={`Biaya aktual ${item.code}`}
+                                style={{ width: 150, minHeight: 38 }} value={edit.costActual} onChange={update('costActual')} />
+                            </td>
+                            <td style={{ padding: '8px 10px' }}>
+                              <input disabled={readOnly} type="text" className="form-input" placeholder="Keterangan" aria-label={`Catatan ${item.code}`}
+                                style={{ width: 200, minHeight: 38 }} value={edit.notes} onChange={update('notes')} />
+                            </td>
+                            <td className="num">
+                              <button className="btn btn-sm btn-primary" disabled={readOnly || savingActual === item.id} onClick={() => saveActual(item, edit)}>
+                                {savingActual === item.id ? 'Menyimpan…' : 'Simpan'}
+                              </button>
+                            </td>
                           </tr>
-                        ))}
-                      </tbody>
-                    </table>
-                  </div>
-                </>
-              )}
-            </motion.div>
-          )}
+                        );
+                      })}
+                    </tbody>
+                  </table>
+                </div>
+              </>
+            ))}
 
-          {/* TAB: INPUT REALISASI */}
-          {activeTab === 'actual' && (
-            <motion.div key="actual" initial={{opacity:0,y:8}} animate={{opacity:1,y:0}} exit={{opacity:0}} transition={{duration:0.2}}>
-              {!hasBoq ? (
-                <div style={{ padding:40, textAlign:'center', color:'var(--gray-400)' }}>Upload BOQ terlebih dahulu</div>
-              ) : (
-                <>
-                  <div style={{ padding:'14px 20px', borderBottom:'1px solid var(--gray-100)', display:'flex', alignItems:'center', gap:12, flexWrap:'wrap' }}>
-                    <label style={{ fontSize:13, fontWeight:600, color:'var(--gray-700)' }}>Bulan Realisasi:</label>
-                    <input disabled={readOnly} type="month" className="form-input" value={selectedMonth} onChange={e => setSelectedMonth(e.target.value)} style={{ width:160, height:36, fontSize:13 }} />
-                    <span style={{ fontSize:12, color:'var(--gray-400)' }}>Input % kemajuan per item untuk bulan ini</span>
-                  </div>
-                  <div style={{ overflowX:'auto' }}>
-                    <table style={{ width:'100%', borderCollapse:'collapse', fontSize:12.5 }}>
-                      <thead>
-                        <tr style={{ background:'var(--gray-50)', borderBottom:'1px solid var(--gray-200)' }}>
-                          <th style={{ padding:'10px 16px', textAlign:'left', color:'var(--gray-500)', fontWeight:600, fontSize:11 }}>URAIAN PEKERJAAN</th>
-                          <th style={{ padding:'10px 12px', textAlign:'center', color:'var(--gray-500)', fontWeight:600, fontSize:11 }}>BOBOT %</th>
-                          <th style={{ padding:'10px 12px', textAlign:'center', color:'var(--gray-500)', fontWeight:600, fontSize:11 }}>% SELESAI BULAN INI</th>
-                          <th style={{ padding:'10px 12px', textAlign:'center', color:'var(--gray-500)', fontWeight:600, fontSize:11 }}>BIAYA AKTUAL</th>
-                          <th style={{ padding:'10px 12px', textAlign:'left', color:'var(--gray-500)', fontWeight:600, fontSize:11 }}>CATATAN</th>
-                          <th style={{ padding:'10px 12px', textAlign:'center', color:'var(--gray-500)', fontWeight:600, fontSize:11 }}>AKSI</th>
-                        </tr>
-                      </thead>
-                      <tbody>
-                        {data.boqItems.filter(i => i.isLeaf).map((item) => {
-                          const existing = item.actuals?.find(a => a.month === selectedMonth);
-                          const editKey = selectedProjectId + ":" + selectedMonth + ":" + item.id;
-                          const edit = actualEdits[editKey] || { progressPct: existing?.progressPct ?? '', costActual: existing?.costActual ?? '', notes: existing?.notes ?? '' };
-                          return (
-                            <tr key={item.id} style={{ borderBottom:'1px solid var(--gray-100)' }}>
-                              <td style={{ padding:'8px 16px', paddingLeft: 16 + levelIndent[item.level] }}>
-                                <span style={levelStyle[item.level]}>{item.code} {item.description}</span>
-                                {item.startMonth && <div style={{ fontSize:11, color:'var(--gray-400)' }}>{fmtMonth(item.startMonth)} — {fmtMonth(item.endMonth)}</div>}
-                              </td>
-                              <td style={{ padding:'8px 12px', textAlign:'center', color:'var(--navy-700)', fontWeight:600 }}>
-                                {item.weight?.toFixed(2) || '—'}%
-                              </td>
-                              <td style={{ padding:'6px 8px', textAlign:'center' }}>
-                                <div style={{ display:'flex', alignItems:'center', gap:4, justifyContent:'center' }}>
-                                  <input disabled={readOnly} type="number" min="0" max="100" step="0.5" className="form-input" placeholder="0"
-                                    style={{ width:70, height:30, textAlign:'center', fontSize:12 }}
-                                    value={edit.progressPct}
-                                    onChange={e => setActualEdits(prev => ({ ...prev, [editKey]: { ...edit, progressPct: e.target.value } }))}
-                                  />
-                                  <span style={{ fontSize:11, color:'var(--gray-400)' }}>%</span>
-                                </div>
-                              </td>
-                              <td style={{ padding:'6px 8px' }}>
-                                <input disabled={readOnly} type="number" min="0" className="form-input" placeholder="0"
-                                  style={{ width:120, height:30, fontSize:12 }}
-                                  value={edit.costActual}
-                                  onChange={e => setActualEdits(prev => ({ ...prev, [editKey]: { ...edit, costActual: e.target.value } }))}
-                                />
-                              </td>
-                              <td style={{ padding:'6px 8px' }}>
-                                <input disabled={readOnly} type="text" className="form-input" placeholder="Keterangan..."
-                                  style={{ width:160, height:30, fontSize:12 }}
-                                  value={edit.notes}
-                                  onChange={e => setActualEdits(prev => ({ ...prev, [editKey]: { ...edit, notes: e.target.value } }))}
-                                />
-                              </td>
-                              <td style={{ padding:'6px 8px', textAlign:'center' }}>
-                                <button className="btn btn-sm btn-primary" style={{ height:28, fontSize:11 }}
-                                  disabled={readOnly} onClick={async () => {
-                                    try { await apiFetch('/api/boq/actual', {
-                                      method:'POST',
-                                      headers:{'Content-Type':'application/json'},
-                                      body: JSON.stringify({ boqItemId: item.id, projectId: selectedProjectId, month: selectedMonth, progressPct: parseFloat(edit.progressPct)||0, costActual: parseFloat(edit.costActual)||0, notes: edit.notes })
-                                    });
-                                    setUploadMsg({ type:'success', text:`Realisasi ${item.code} bulan ${fmtMonth(selectedMonth)} tersimpan` });
-                                    await loadData();
-                                    } catch (error) { await showAlert(error.message, 'Gagal menyimpan realisasi'); }
-                                  }}
-                                >
-                                  Simpan
-                                </button>
-                              </td>
-                            </tr>
-                          );
-                        })}
-                      </tbody>
-                    </table>
-                  </div>
-                </>
-              )}
-            </motion.div>
-          )}
-
-          {/* TAB: LAPORAN */}
-          {activeTab === 'report' && (
-            <motion.div key="report" initial={{opacity:0,y:8}} animate={{opacity:1,y:0}} exit={{opacity:0}} transition={{duration:0.2}} style={{ padding:24 }}>
-              {!hasBoq ? (
-                <div style={{ padding:40, textAlign:'center', color:'var(--gray-400)' }}>Upload BOQ terlebih dahulu</div>
-              ) : (
-                <>
-                  <div style={{ display:'flex', justifyContent:'space-between', alignItems:'center', marginBottom:16, flexWrap:'wrap', gap:12 }}>
-                    <div style={{ fontWeight:600, fontSize:15, color:'var(--navy-800)' }}>Plan vs Aktual per Kelompok Pekerjaan</div>
-                  </div>
-                  <div style={{ overflowX:'auto' }}>
-                    <table style={{ width:'100%', borderCollapse:'collapse', fontSize:13 }}>
-                      <thead>
-                        <tr style={{ background:'var(--navy-800)', color:'white' }}>
-                          {['KODE','URAIAN PEKERJAAN','BOBOT %','RENCANA %','AKTUAL %','DEVIASI','STATUS'].map(h => (
-                            <th key={h} style={{ padding:'10px 14px', textAlign: h==='URAIAN PEKERJAAN'?'left':'center', fontWeight:600, fontSize:11, letterSpacing:0.3 }}>{h}</th>
-                          ))}
-                        </tr>
-                      </thead>
-                      <tbody>
-                        {data.boqItems.filter(i => i.level <= 2 && i.totalPrice).map((item) => {
-                          const totalPct = item.actuals?.reduce((s, a) => s + (a.progressPct || 0), 0) || 0;
-                          const hasSchedule = item.startMonth && item.endMonth;
-                          // Simple plan: linear from now
-                          const deviation = totalPct;
-                          const status = totalPct >= 100 ? 'Selesai' : totalPct > 50 ? 'Berjalan' : totalPct > 0 ? 'Mulai' : 'Belum';
-                          const statusColor = totalPct >= 100 ? 'var(--green-600)' : totalPct > 0 ? 'var(--orange-500)' : 'var(--gray-400)';
-                          return (
-                            <tr key={item.id} style={{ borderBottom:'1px solid var(--gray-100)', background: item.level===1 ? 'var(--navy-50)' : 'white' }}>
-                              <td style={{ padding:'10px 14px', fontWeight:700, color:'var(--navy-700)' }}>{item.code}</td>
-                              <td style={{ padding:'10px 14px', paddingLeft: 14 + levelIndent[item.level] }}>
-                                <span style={levelStyle[item.level]}>{item.description}</span>
-                              </td>
-                              <td style={{ padding:'10px 14px', textAlign:'center', fontWeight:600 }}>{item.weight?.toFixed(2) || '—'}%</td>
-                              <td style={{ padding:'10px 14px', textAlign:'center', color:'var(--navy-600)', fontWeight:600 }}>
-                                {hasSchedule ? `—` : '—'}
-                              </td>
-                              <td style={{ padding:'10px 14px', textAlign:'center', color:'var(--orange-600)', fontWeight:600 }}>
-                                {totalPct > 0 ? `${totalPct.toFixed(1)}%` : '—'}
-                              </td>
-                              <td style={{ padding:'10px 14px', textAlign:'center' }}>—</td>
-                              <td style={{ padding:'10px 14px', textAlign:'center' }}>
-                                <span style={{ fontSize:11, fontWeight:600, color:statusColor, background:`${statusColor}15`, padding:'3px 8px', borderRadius:99 }}>
-                                  {status}
-                                </span>
-                              </td>
-                            </tr>
-                          );
-                        })}
-                      </tbody>
-                    </table>
-                  </div>
-                </>
-              )}
-            </motion.div>
-          )}
-        
-          </AnimatePresence>
-{editingItem && (
-            <div style={{ position:'fixed', top:0, left:0, right:0, bottom:0, background:'rgba(0,0,0,0.5)', zIndex:999, display:'flex', alignItems:'center', justifyContent:'center' }}>
-              <div className="card" style={{ width: 400, padding: 24 }}>
-                <h3 style={{ marginTop:0, color:'var(--navy-800)' }}>Edit Item BOQ</h3>
-                <form onSubmit={saveItemEdit} style={{ display:'flex', flexDirection:'column', gap: 12 }}>
-                  <div>
-                    <label style={{ fontSize:12, fontWeight:600 }}>Kode</label>
-                    <input type="text" className="form-input" value={editingItem.code || ''} onChange={e => setEditingItem({...editingItem, code: e.target.value})} required />
-                  </div>
-                  <div>
-                    <label style={{ fontSize:12, fontWeight:600 }}>Uraian Pekerjaan</label>
-                    <textarea className="form-input" rows={3} value={editingItem.description || ''} onChange={e => setEditingItem({...editingItem, description: e.target.value})} required />
-                  </div>
-                  <div>
-                    <label style={{ fontSize:12, fontWeight:600 }}>Total Price (Rp)</label>
-                    <input type="number" className="form-input" value={editingItem.totalPrice || ''} onChange={e => setEditingItem({...editingItem, totalPrice: e.target.value})} />
-                  </div>
-                  <div style={{ display:'flex', justifyContent:'flex-end', gap: 8, marginTop: 12 }}>
-                    <button type="button" className="btn btn-outline" onClick={() => setEditingItem(null)}>Batal</button>
-                    <button type="submit" className="btn btn-primary">Simpan</button>
-                  </div>
-                </form>
-              </div>
-            </div>
-          )}
-{isAddingItem && (
-            <div style={{ position:'fixed', top:0, left:0, right:0, bottom:0, background:'rgba(0,0,0,0.5)', zIndex:999, display:'flex', alignItems:'center', justifyContent:'center' }}>
-              <div className="card" style={{ width: 400, padding: 24 }}>
-                <h3 style={{ marginTop:0, color:'var(--navy-800)' }}>Tambah Item Baru</h3>
-                <form onSubmit={saveNewItem} style={{ display:'flex', flexDirection:'column', gap: 12 }}>
-                  <div>
-                    <label style={{ fontSize:12, fontWeight:600 }}>Kode / Nomor</label>
-                    <input type="text" className="form-input" value={newItem.code} onChange={e => setNewItem({...newItem, code: e.target.value})} placeholder="Misal: A.8" required />
-                  </div>
-                  <div>
-                    <label style={{ fontSize:12, fontWeight:600 }}>Uraian Pekerjaan</label>
-                    <textarea className="form-input" rows={3} value={newItem.description} onChange={e => setNewItem({...newItem, description: e.target.value})} placeholder="Deskripsi pekerjaan" required />
-                  </div>
-                  <div>
-                    <label style={{ fontSize:12, fontWeight:600 }}>Total Price (Rp)</label>
-                    <input type="number" className="form-input" value={newItem.totalPrice} onChange={e => setNewItem({...newItem, totalPrice: e.target.value})} placeholder="0" />
-                  </div>
-                  <div style={{ display:'flex', justifyContent:'flex-end', gap: 8, marginTop: 12 }}>
-                    <button type="button" className="btn btn-outline" onClick={() => setIsAddingItem(false)}>Batal</button>
-                    <button type="submit" className="btn btn-primary">Tambahkan</button>
-                  </div>
-                </form>
-              </div>
-            </div>
-          )}
+            {/* TAB: LAPORAN */}
+            {activeTab === 'report' && (!hasBoq ? <div className="card-body"><NeedBoq onGo={() => setActiveTab('boq')} /></div> : (
+              <>
+                <div style={{ padding: '16px 20px', borderBottom: '1px solid var(--gray-200)' }}>
+                  <h3 style={{ fontSize: 16 }}>Rencana vs realisasi per kelompok pekerjaan</h3>
+                  <p className="muted" style={{ fontSize: 14, marginTop: 2 }}>
+                    Rencana dihitung merata per bulan sesuai jadwal item, sampai bulan {fmtMonth(businessToday().slice(0, 7))}. Persentase relatif terhadap bobot kelompok.
+                  </p>
+                </div>
+                <div className="table-wrapper">
+                  <table>
+                    <thead>
+                      <tr>
+                        <th>Kode</th>
+                        <th>Uraian pekerjaan</th>
+                        <th className="num">Bobot</th>
+                        <th className="num">Rencana</th>
+                        <th className="num">Realisasi</th>
+                        <th className="num">Deviasi</th>
+                        <th>Status</th>
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {report.map(({ group, weight, planned, actual, scheduled }) => {
+                        const deviation = actual - planned;
+                        const status = actual >= 99.95 ? ['Selesai', 'success']
+                          : !scheduled ? ['Belum dijadwalkan', 'gray']
+                            : deviation < -5 ? ['Terlambat', 'danger']
+                              : actual > 0 ? ['Berjalan', 'info'] : planned > 0 ? ['Belum mulai', 'warning'] : ['Belum waktunya', 'gray'];
+                        return (
+                          <tr key={group.id} style={{ background: group.level === 1 ? 'var(--brand-50)' : undefined }}>
+                            <td className="nowrap" style={{ fontWeight: 600, color: 'var(--brand-700)' }}>{group.code}</td>
+                            <td style={{ paddingLeft: 16 + (levelIndent[group.level] ?? 0), minWidth: 240 }}>
+                              <span style={levelStyle[group.level] ?? levelStyle[4]}>{group.description}</span>
+                            </td>
+                            <td className="num">{weight.toFixed(2)}%</td>
+                            <td className="num" style={{ color: 'var(--brand-700)', fontWeight: 600 }}>{scheduled ? pct(planned) : '—'}</td>
+                            <td className="num" style={{ color: 'var(--accent-600)', fontWeight: 600 }}>{pct(actual)}</td>
+                            <td className="num" style={{ fontWeight: 600, color: !scheduled ? 'var(--gray-400)' : deviation >= 0 ? 'var(--green-600)' : 'var(--red-600)' }}>
+                              {scheduled ? `${deviation > 0 ? '+' : ''}${pct(deviation)}` : '—'}
+                            </td>
+                            <td><span className={`badge badge-${status[1]}`}>{status[0]}</span></td>
+                          </tr>
+                        );
+                      })}
+                    </tbody>
+                  </table>
+                </div>
+              </>
+            ))}
+          </>
+        )}
       </div>
 
-      <style>{`
-        @keyframes spin { from{transform:rotate(0deg)} to{transform:rotate(360deg)} }
-      `}</style>
+      {itemForm && (
+        <Modal
+          title={itemForm.id ? 'Ubah item BOQ' : 'Tambah item BOQ'}
+          subtitle={selectedProject ? `${selectedProject.code} — ${selectedProject.name}` : undefined}
+          onClose={() => setItemForm(null)}
+          busy={savingItem}
+          size="modal-sm"
+          footer={
+            <>
+              <button type="button" className="btn btn-outline" onClick={() => setItemForm(null)} disabled={savingItem}>Batal</button>
+              <button type="submit" form="boq-item-form" className="btn btn-primary" disabled={savingItem}>{savingItem ? 'Menyimpan…' : 'Simpan'}</button>
+            </>
+          }
+        >
+          <form id="boq-item-form" onSubmit={saveItem} className="form-stack">
+            <div className="form-group">
+              <label className="form-label required" htmlFor="boq-code">Kode / nomor</label>
+              <input id="boq-code" className="form-input" value={itemForm.code} onChange={(e) => setItemForm({ ...itemForm, code: e.target.value })} placeholder="Misal: A.8" required />
+              <div className="form-hint">Gunakan titik untuk hierarki, misal A.8.1 berada di bawah A.8.</div>
+            </div>
+            <div className="form-group">
+              <label className="form-label required" htmlFor="boq-desc">Uraian pekerjaan</label>
+              <textarea id="boq-desc" className="form-input" rows={3} value={itemForm.description} onChange={(e) => setItemForm({ ...itemForm, description: e.target.value })} required />
+            </div>
+            <div className="form-group">
+              <label className="form-label" htmlFor="boq-price">Total harga (Rp)</label>
+              <input id="boq-price" type="number" min="0" className="form-input" value={itemForm.totalPrice} onChange={(e) => setItemForm({ ...itemForm, totalPrice: e.target.value })} placeholder="0" />
+            </div>
+          </form>
+        </Modal>
+      )}
     </div>
   );
 }

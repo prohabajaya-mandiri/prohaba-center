@@ -6,7 +6,7 @@ import SCurveClient from './SCurveClient';
 import { prisma } from '@/lib/prisma';
 
 export const metadata = {
-  title: 'S-Curve & Progress — ERP Prohaba Jaya Mandiri',
+  title: 'S-Curve & Progress',
 };
 
 export default async function SCurvePage() {

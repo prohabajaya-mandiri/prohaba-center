@@ -1,84 +1,66 @@
 'use client'
 import { apiFetch } from '@/lib/client-api';
 
-import React, { useState, useRef } from 'react'
-import { motion, AnimatePresence } from 'framer-motion'
-import { 
-  FileText, UploadCloud, Search, Download, Trash2, 
-  XCircle, AlertCircle, File, Building, Target, BookOpen, Clock
-} from 'lucide-react'
+import { useRef, useState } from 'react'
+import { FileText, UploadCloud, Download, Trash2, AlertCircle, File } from 'lucide-react'
 import { useDialog } from '@/components/DialogProvider'
+import { EmptyRow, Modal, SearchField } from '@/components/ui'
+import { DOC_CATEGORY, fmtDate } from '@/lib/ui-labels'
+
+const formatFileSize = (bytes) => {
+  if (!bytes) return '0 B'
+  const k = 1024
+  const sizes = ['B', 'KB', 'MB', 'GB']
+  const i = Math.floor(Math.log(bytes) / Math.log(k))
+  return parseFloat((bytes / Math.pow(k, i)).toFixed(1)).toLocaleString('id-ID') + ' ' + sizes[i]
+}
+
+const parseTargets = (raw) => {
+  try { return JSON.parse(raw || '[]') } catch { return [] }
+}
 
 export default function DocumentsClient({ initialDocuments, projects, user }) {
   const [documents, setDocuments] = useState(initialDocuments)
   const [search, setSearch] = useState('')
   const [isModalOpen, setIsModalOpen] = useState(false)
-  const [loading, setLoading] = useState(false)
   const [errorMsg, setErrorMsg] = useState('')
   const [uploading, setUploading] = useState(false)
+  const [dragging, setDragging] = useState(false)
   const fileInputRef = useRef(null)
   const { showAlert, showConfirm } = useDialog()
-  
-  // Form State
-  const [formData, setFormData] = useState({
-    projectId: '',
-    title: '',
-    docNumber: '',
-    revision: 'A',
-    category: 'DRAWING',
-    targets: []
-  })
+  const canEdit = user.role !== 'WORKSHOP'
+
+  const [formData, setFormData] = useState({ projectId: '', title: '', docNumber: '', revision: 'A', category: 'DRAWING', targets: [] })
   const [selectedFile, setSelectedFile] = useState(null)
 
-  const filteredDocs = documents.filter(d => 
-    d.title.toLowerCase().includes(search.toLowerCase()) || 
-    d.docNumber.toLowerCase().includes(search.toLowerCase()) ||
-    (d.project?.name || '').toLowerCase().includes(search.toLowerCase())
+  const q = search.trim().toLowerCase()
+  const filteredDocs = documents.filter((d) =>
+    !q || [d.title, d.docNumber, d.project?.name, d.project?.code].some((v) => (v || '').toLowerCase().includes(q)),
   )
 
   const handleOpenModal = () => {
     setErrorMsg('')
-    setFormData({
-      projectId: projects[0]?.id || '',
-      title: '',
-      docNumber: '',
-      revision: 'A',
-      category: 'DRAWING',
-      targets: ['SITE']
-    })
+    setFormData({ projectId: projects[0]?.id || '', title: '', docNumber: '', revision: 'A', category: 'DRAWING', targets: ['SITE'] })
     setSelectedFile(null)
     setIsModalOpen(true)
   }
 
   const handleTargetToggle = (target) => {
-    setFormData(prev => {
-      const targets = prev.targets.includes(target)
-        ? prev.targets.filter(t => t !== target)
-        : [...prev.targets, target]
-      return { ...prev, targets }
-    })
-  }
-
-  const handleFileChange = (e) => {
-    if (e.target.files && e.target.files[0]) {
-      setSelectedFile(e.target.files[0])
-    }
+    setFormData((prev) => ({
+      ...prev,
+      targets: prev.targets.includes(target) ? prev.targets.filter((t) => t !== target) : [...prev.targets, target],
+    }))
   }
 
   const handleUpload = async (e) => {
     e.preventDefault()
-    if (!selectedFile) {
-      setErrorMsg('Harap lampirkan file dokumen.')
-      return
-    }
-    if (!formData.projectId) {
-      setErrorMsg('Pilih proyek terlebih dahulu.')
-      return
-    }
+    if (!selectedFile) return setErrorMsg('Lampirkan file dokumen terlebih dahulu.')
+    if (!formData.projectId) return setErrorMsg('Pilih proyek terlebih dahulu.')
+    if (!formData.targets.length) return setErrorMsg('Pilih minimal satu target distribusi.')
+    if (selectedFile.size > 4 * 1024 * 1024) return setErrorMsg('Ukuran file melebihi batas 4 MB.')
 
     setUploading(true)
     setErrorMsg('')
-
     try {
       const data = new FormData()
       data.append('projectId', formData.projectId)
@@ -89,16 +71,11 @@ export default function DocumentsClient({ initialDocuments, projects, user }) {
       data.append('targets', JSON.stringify(formData.targets))
       data.append('file', selectedFile)
 
-      const res = await apiFetch('/api/documents', {
-        method: 'POST',
-        body: data // Don't set Content-Type header, let browser set it with boundary
-      })
-
+      const res = await apiFetch('/api/documents', { method: 'POST', body: data })
       const result = await res.json()
-      if (!res.ok) throw new Error(result.error || 'Terjadi kesalahan')
-
       setDocuments([result, ...documents])
       setIsModalOpen(false)
+      await showAlert(`Dokumen ${result.docNumber} berhasil diunggah.`, 'Berhasil')
     } catch (err) {
       setErrorMsg(err.message)
     } finally {
@@ -106,163 +83,90 @@ export default function DocumentsClient({ initialDocuments, projects, user }) {
     }
   }
 
-  const handleDelete = async (id) => {
-    const confirmed = await showConfirm('Apakah Anda yakin ingin menghapus dokumen ini?', 'Konfirmasi');
+  const handleDelete = async (d) => {
+    const confirmed = await showConfirm(`Hapus dokumen ${d.docNumber} — ${d.title}? File akan dihapus permanen.`, 'Hapus dokumen')
     if (!confirmed) return
-    
     try {
-      const res = await apiFetch(`/api/documents/${id}`, { method: 'DELETE' })
-      if (!res.ok) {
-        const result = await res.json()
-        throw new Error(result.error || 'Gagal menghapus')
-      }
-      setDocuments(documents.filter(d => d.id !== id))
+      await apiFetch(`/api/documents/${d.id}`, { method: 'DELETE' })
+      setDocuments(documents.filter((x) => x.id !== d.id))
     } catch (err) {
-      await showAlert(err.message, 'Error')
+      await showAlert(err.message, 'Gagal')
     }
-  }
-
-  const getCategoryColor = (cat) => {
-    switch (cat) {
-      case 'DRAWING': return 'badge-info'
-      case 'SPECIFICATION': return 'badge-warning'
-      case 'REPORT': return 'badge-success'
-      case 'CALCULATION': return 'badge-danger'
-      default: return 'badge-neutral'
-    }
-  }
-
-  const formatFileSize = (bytes) => {
-    if (bytes === 0) return '0 Bytes'
-    const k = 1024
-    const sizes = ['Bytes', 'KB', 'MB', 'GB']
-    const i = Math.floor(Math.log(bytes) / Math.log(k))
-    return parseFloat((bytes / Math.pow(k, i)).toFixed(2)) + ' ' + sizes[i]
   }
 
   return (
-    <motion.div 
-      style={{ display: 'flex', flexDirection: 'column', gap: '24px', width: '100%' }}
-      initial={{ opacity: 0, y: 10 }}
-      animate={{ opacity: 1, y: 0 }}
-    >
-      {/* Top Actions */}
-      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: '16px' }}>
-        <div style={{ position: 'relative', width: '320px', maxWidth: '100%' }}>
-          <Search style={{ width: '20px', height: '20px', position: 'absolute', left: '16px', top: '50%', transform: 'translateY(-50%)', color: 'var(--gray-400)' }} />
-          <input 
-            type="text" 
-            placeholder="Cari Dokumen..." 
-            className="form-input"
-            style={{ paddingLeft: '44px', borderRadius: '12px', background: 'white', height: '44px' }}
-            value={search}
-            onChange={(e) => setSearch(e.target.value)}
-          />
-        </div>
-        <button 
-          className="btn btn-primary" 
-          style={{ height: '44px', borderRadius: '12px', display: 'flex', alignItems: 'center', gap: '8px' }}
-          disabled={user.role==='WORKSHOP'} onClick={handleOpenModal}
-        >
-          <UploadCloud size={18} /> 
-          <span>Unggah Dokumen</span>
-        </button>
+    <div className="stack">
+      <div className="toolbar">
+        <SearchField value={search} onChange={setSearch} placeholder="Cari judul, nomor dokumen, atau proyek" />
+        <div className="spacer" />
+        {canEdit && (
+          <button className="btn btn-primary" onClick={handleOpenModal} disabled={!projects.length} title={!projects.length ? 'Belum ada proyek aktif' : undefined}>
+            <UploadCloud aria-hidden /> Unggah dokumen
+          </button>
+        )}
       </div>
 
-      {/* Main Table Card */}
-      <div className="card" style={{ boxShadow: 'var(--shadow-md)', border: '1px solid var(--gray-200)', borderRadius: '16px', overflow: 'hidden' }}>
+      <div className="card">
         <div className="table-wrapper">
           <table>
-            <thead style={{ background: 'var(--gray-50)' }}>
+            <thead>
               <tr>
                 <th>Dokumen</th>
                 <th>Proyek</th>
-                <th>Kategori & Revisi</th>
-                <th>Target Distribusi</th>
-                <th>Tanggal Unggah</th>
-                <th style={{ textAlign: 'right' }}>Aksi</th>
+                <th>Kategori & revisi</th>
+                <th>Distribusi</th>
+                <th>Diunggah</th>
+                <th className="num">Aksi</th>
               </tr>
             </thead>
             <tbody>
               {filteredDocs.length === 0 ? (
-                <tr>
-                  <td colSpan="6" style={{ textAlign: 'center', padding: '40px', color: 'var(--gray-500)' }}>
-                    Tidak ada dokumen ditemukan.
-                  </td>
-                </tr>
+                <EmptyRow colSpan={6} title={documents.length ? 'Tidak ada dokumen yang cocok' : 'Belum ada dokumen'} hint={documents.length ? 'Coba kata kunci lain.' : canEdit ? 'Klik "Unggah dokumen" untuk menambahkan.' : undefined} />
               ) : filteredDocs.map((d) => {
-                const targets = JSON.parse(d.targets || '[]')
+                const targets = parseTargets(d.targets)
+                const cat = DOC_CATEGORY[d.category]
                 return (
-                  <tr key={d.id} style={{ transition: 'background 0.2s ease' }} onMouseEnter={e => e.currentTarget.style.background = 'var(--gray-50)' } onMouseLeave={e => e.currentTarget.style.borderColor = 'transparent' }>
-                    <td>
-                      <div style={{ display: 'flex', alignItems: 'center', gap: '12px' }}>
-                        <div style={{ 
-                          width: '40px', height: '40px', borderRadius: '10px', 
-                          background: 'var(--blue-50)', color: 'var(--blue-600)', 
-                          display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0
-                        }}>
-                          <FileText size={20} />
-                        </div>
-                        <div>
-                          <p style={{ fontWeight: 700, color: 'var(--gray-900)', fontSize: '14px' }}>{d.title}</p>
-                          <p style={{ fontSize: '12.5px', color: 'var(--gray-500)', marginTop: '2px', fontWeight: 500 }}>
-                            {d.docNumber} • {formatFileSize(d.fileSize)}
-                          </p>
+                  <tr key={d.id}>
+                    <td style={{ minWidth: 240 }}>
+                      <div style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
+                        <div className="project-icon" style={{ width: 38, height: 38 }}><FileText size={19} /></div>
+                        <div style={{ minWidth: 0 }}>
+                          <div className="cell-title">{d.title}</div>
+                          <div className="cell-sub">{d.docNumber} · {formatFileSize(d.fileSize)}</div>
                         </div>
                       </div>
                     </td>
                     <td>
-                      <span style={{ fontWeight: 600, color: 'var(--navy-800)', fontSize: '13px' }}>
-                        {d.project?.name || 'Unknown'}
-                      </span>
+                      <div style={{ fontWeight: 500, color: 'var(--gray-900)' }}>{d.project?.code || '-'}</div>
+                      <div className="cell-sub">{d.project?.name}</div>
                     </td>
                     <td>
-                      <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
-                        <span className={`badge ${getCategoryColor(d.category)}`} style={{ padding: '6px 10px', borderRadius: '8px', fontWeight: 600, fontSize: '11px' }}>
-                          {d.category}
-                        </span>
-                        <span style={{ fontSize: '12px', fontWeight: 700, color: 'var(--gray-600)', background: 'var(--gray-100)', padding: '4px 8px', borderRadius: '6px' }}>
-                          Rev {d.revision}
-                        </span>
+                      <div style={{ display: 'flex', alignItems: 'center', gap: 6, flexWrap: 'wrap' }}>
+                        <span className={`badge badge-${cat?.[1] ?? 'gray'}`}>{cat?.[0] ?? d.category}</span>
+                        <span className="chip">Rev {d.revision}</span>
                       </div>
                     </td>
                     <td>
-                      <div style={{ display: 'flex', gap: '4px' }}>
-                        {targets.includes('SITE') && (
-                          <span className="badge badge-success" style={{ fontSize: '11px', padding: '4px 8px', borderRadius: '6px', fontWeight: 600 }}>SITE</span>
-                        )}
-                        {targets.includes('WORKSHOP') && (
-                          <span className="badge badge-warning" style={{ fontSize: '11px', padding: '4px 8px', borderRadius: '6px', fontWeight: 600 }}>WORKSHOP</span>
-                        )}
+                      <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap' }}>
+                        {targets.includes('SITE') && <span className="badge badge-success">Tim lapangan</span>}
+                        {targets.includes('WORKSHOP') && <span className="badge badge-orange">Workshop</span>}
+                        {!targets.length && <span className="muted">-</span>}
                       </div>
                     </td>
-                    <td style={{ color: 'var(--gray-600)', fontSize: '13px', fontWeight: 500 }}>
-                      <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
-                        <Clock size={14} />
-                        {new Date(d.createdAt).toLocaleDateString('id-ID', { day: 'numeric', month: 'short', year: 'numeric' })}
-                      </div>
-                      <div style={{ fontSize: '11px', color: 'var(--gray-400)', marginTop: '2px' }}>Oleh {d.uploader?.name}</div>
+                    <td className="nowrap">
+                      <div>{fmtDate(d.createdAt)}</div>
+                      <div className="cell-sub">oleh {d.uploader?.name || '-'}</div>
                     </td>
-                    <td style={{ textAlign: 'right' }}>
-                      <div style={{ display: 'flex', justifyContent: 'flex-end', gap: '8px' }}>
-                        <a 
-                          href={d.fileUrl} 
-                          target="_blank" 
-                          rel="noopener noreferrer"
-                          className="btn-ghost" 
-                          style={{ padding: '8px', borderRadius: '8px', color: 'var(--blue-600)', display: 'inline-flex' }}
-                          title="Unduh / Lihat Dokumen"
-                        >
-                          <Download size={18} />
+                    <td>
+                      <div className="row-actions">
+                        <a href={d.fileUrl} target="_blank" rel="noopener noreferrer" className="action-btn" title="Unduh / lihat dokumen" aria-label={`Unduh ${d.title}`}>
+                          <Download />
                         </a>
-                        <button 
-                          className="btn-ghost" 
-                          style={{ padding: '8px', borderRadius: '8px', color: 'var(--red-600)' }}
-                          disabled={user.role==='WORKSHOP'} onClick={() => handleDelete(d.id)}
-                          title="Hapus Dokumen"
-                        >
-                          <Trash2 size={18} />
-                        </button>
+                        {canEdit && (
+                          <button className="action-btn danger" onClick={() => handleDelete(d)} title="Hapus dokumen" aria-label={`Hapus ${d.title}`}>
+                            <Trash2 />
+                          </button>
+                        )}
                       </div>
                     </td>
                   </tr>
@@ -273,176 +177,91 @@ export default function DocumentsClient({ initialDocuments, projects, user }) {
         </div>
       </div>
 
-      {/* Modal Form */}
-      <AnimatePresence>
-        {isModalOpen && (
-          <motion.div 
-            style={{ 
-              position: 'fixed', inset: 0, zIndex: 999, 
-              display: 'flex', alignItems: 'center', justifyContent: 'center',
-              background: 'rgba(15, 23, 42, 0.4)', backdropFilter: 'blur(4px)'
-            }}
-            initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }}
-          >
-            <motion.div 
-              style={{ 
-                background: 'white', borderRadius: '20px', width: '100%', maxWidth: '600px', 
-                boxShadow: 'var(--shadow-|e)', overflow: 'hidden'
-              }}
-              initial={{ scale: 0.95, y: 20 }} animate={{ scale: 1, y: 0 }} exit={{ scale: 0.95, y: 20 }}
-            >
-              <div style={{ padding: '24px 32px', borderBottom: '1px solid var(--gray-100)', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-                <div>
-                  <h3 style={{ fontSize: '18px', fontWeight: 700, color: 'var(--navy-900)' }}>Unggah Dokumen Baru</h3>
-                  <p style={{ fontSize: '13px', color: 'var(--gray-500)', marginTop: '4px' }}>
-                    Unggah dokumen teknis untuk didistribusikan ke lokasi kerja.
-                  </p>
-                </div>
-                <button onClick={() => setIsModalOpen(false)} style={{ background: 'none', border: 'none', cursor: 'pointer', color: 'var(--gray-400)', padding: '4px' }}>
-                  <XCircle size={24} />
-                </button>
+      {isModalOpen && (
+        <Modal
+          title="Unggah dokumen baru"
+          subtitle="Dokumen teknis akan didistribusikan ke tim yang dipilih."
+          onClose={() => setIsModalOpen(false)}
+          busy={uploading}
+          footer={
+            <>
+              <button type="button" className="btn btn-outline" onClick={() => setIsModalOpen(false)} disabled={uploading}>Batal</button>
+              <button type="submit" form="doc-form" className="btn btn-primary" disabled={uploading}>
+                {uploading ? 'Mengunggah…' : <><UploadCloud aria-hidden /> Unggah & simpan</>}
+              </button>
+            </>
+          }
+        >
+          <form id="doc-form" onSubmit={handleUpload} className="form-stack">
+            {errorMsg && (
+              <div className="alert alert-danger" role="alert"><AlertCircle aria-hidden /> {errorMsg}</div>
+            )}
+
+            <div className="form-group">
+              <label className="form-label required" htmlFor="doc-project">Proyek terkait</label>
+              <select id="doc-project" className="form-select" value={formData.projectId} onChange={(e) => setFormData({ ...formData, projectId: e.target.value })} required>
+                <option value="" disabled>Pilih proyek</option>
+                {projects.map((p) => <option key={p.id} value={p.id}>{p.code} — {p.name}</option>)}
+              </select>
+            </div>
+
+            <div className="form-grid" style={{ gridTemplateColumns: '2fr 1fr' }}>
+              <div className="form-group">
+                <label className="form-label required" htmlFor="doc-number">Nomor dokumen</label>
+                <input id="doc-number" required className="form-input" placeholder="DWG-STR-001" value={formData.docNumber} onChange={(e) => setFormData({ ...formData, docNumber: e.target.value })} />
               </div>
+              <div className="form-group">
+                <label className="form-label required" htmlFor="doc-rev">Revisi</label>
+                <input id="doc-rev" required maxLength={20} className="form-input" placeholder="A" value={formData.revision} onChange={(e) => setFormData({ ...formData, revision: e.target.value.toUpperCase() })} />
+              </div>
+            </div>
 
-              <form onSubmit={handleUpload} style={{ padding: '32px', display: 'flex', flexDirection: 'column', gap: '20px' }}>
-                {errorMsg && (
-                  <div style={{ padding: '12px 16px', background: 'var(--red-50)', color: 'var(--red-600)', borderRadius: '10px', fontSize: '13px', fontWeight: 500, display: 'flex', alignItems: 'center', gap: '8px' }}>
-                    <AlertCircle size={16} /> {errorMsg}
-                  </div>
-                )}
+            <div className="form-group">
+              <label className="form-label required" htmlFor="doc-title">Judul dokumen</label>
+              <input id="doc-title" required className="form-input" value={formData.title} onChange={(e) => setFormData({ ...formData, title: e.target.value })} />
+            </div>
 
-                <div className="form-group">
-                  <label className="form-label required">Proyek Terkait</label>
-                  <select 
-                    className="form-select" 
-                    style={{ height: '44px', borderRadius: '10px', fontWeight: 500 }}
-                    value={formData.projectId} onChange={e => setFormData({...formData, projectId: e.target.value})}
-                    required
-                  >
-                    <option value="" disabled>Pilih Proyek</option>
-                    {projects.map(p => (
-                      <option key={p.id} value={p.id}>{p.code} - {p.name}</option>
-                   ))}
-                  </select>
+            <div className="form-grid">
+              <div className="form-group">
+                <label className="form-label required" htmlFor="doc-cat">Kategori</label>
+                <select id="doc-cat" className="form-select" value={formData.category} onChange={(e) => setFormData({ ...formData, category: e.target.value })}>
+                  {Object.entries(DOC_CATEGORY).map(([v, [l]]) => <option key={v} value={v}>{l}</option>)}
+                </select>
+              </div>
+              <fieldset className="form-group" style={{ border: 'none' }}>
+                <legend className="form-label required">Target distribusi</legend>
+                <div style={{ display: 'flex', gap: 18, flexWrap: 'wrap', minHeight: 42, alignItems: 'center' }}>
+                  <label className="check-row">
+                    <input type="checkbox" checked={formData.targets.includes('SITE')} onChange={() => handleTargetToggle('SITE')} /> Tim lapangan
+                  </label>
+                  <label className="check-row">
+                    <input type="checkbox" checked={formData.targets.includes('WORKSHOP')} onChange={() => handleTargetToggle('WORKSHOP')} /> Workshop
+                  </label>
                 </div>
+              </fieldset>
+            </div>
 
-                <div style={{ display: 'grid', gridTemplateColumns: '2fr 1fr', gap: '16px' }}>
-                  <div className="form-group">
-                    <label className="form-label required">Nomor Dokumen</label>
-                    <input 
-                      type="text" required
-                      className="form-input" 
-                      placeholder="DWG-STR-001"
-                      style={{ height: '44px', borderRadius: '10px' }}
-                      value={formData.docNumber} onChange={e => setFormData({...formData, docNumber: e.target.value})}
-                    />
-                  </div>
-                  <div className="form-group">
-                    <label className="form-label required">Revisi</label>
-                    <input 
-                      type="text" required
-                      className="form-input" 
-                      placeholder="00"
-                      style={{ height: '44px', borderRadius: '10px' }}
-                      value={formData.revision} onChange={e => setFormData({...formData, revision: e.target.value.toUpperCase()})}
-                    />
-                  </div>
-                </div>
-
-                <div className="form-group">
-                  <label className="form-label required">Judul Dokumen</label>
-                  <input 
-                    type="text" required
-                    className="form-input" 
-                    placeholder="Judul Dokumen"
-                    style={{ height: '44px', borderRadius: '10px' }}
-                    value={formData.title} onChange={e => setFormData({...formData, title: e.target.value})}
-                  />
-                </div>
-
-                <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '16px' }}>
-                  <div className="form-group">
-                    <label className="form-label required">Kategori</label>
-                    <select 
-                      className="form-select" 
-                      style={{ height: '44px', borderRadius: '10px', fontWeight: 500 }}
-                      value={formData.category} onChange={e => setFormData({...formData, category: e.target.value})}
-                    >
-                      <option value="DRAWING">Blueprint</option>
-                      <option value="SPECIFICATION">Spesifikasi</option>
-                      <option value="CALCULATION">Kalkulasi</option>
-                      <option value="REPORT">Laporan</option>
-                    </select>
-                  </div>
-
-                  <div className="form-group">
-                    <label className="form-label required">Target Distribusi</label>
-                    <div style={{ display: 'flex', gap: '12px', marginTop: '8px' }}>
-                      <label style={{ display: 'flex', alignItems: 'center', gap: '8px', cursor: 'pointer', fontSize: '13px', fontWeight: 500, color: 'var(--gray-700)' }}>
-                        <input 
-                          type="checkbox" 
-                          checked={formData.targets.includes('SITE')}
-                          onChange={() => handleTargetToggle('SITE')}
-                          style={{ width: '16px', height: '16px', accentColor: 'var(--navy-600)' }}
-                        /> 
-                        Tim Lapangan
-                      </label>
-                      <label style={{ display: 'flex', alignItems: 'center', gap: '8px', cursor: 'pointer', fontSize: '13px', fontWeight: 500, color: 'var(--gray-700)' }}>
-                        <input 
-                          type="checkbox" 
-                          checked={formData.targets.includes('WORKSHOP')}
-                          onChange={() => handleTargetToggle('WORKSHOP')}
-                          style={{ width: '16px', height: '16px', accentColor: 'var(--navy-600)' }}
-                        /> 
-                        Tim Pabrikasi
-                      </label>
-                    </div>
-                  </div>
-                </div>
-
-                <div className="form-group">
-                  <label className="form-label required">Pilih File</label>
-                  <div 
-                    style={{ 
-                      border: '2px dashed var(--gray-300)', borderRadius: '12px', padding: '24px',
-                      display: 'flex', flexDirection: 'column', alignItems: 'center', gap: '12px',
-                      background: 'var(--gray-50)', cursor: 'pointer', transition: 'all 0.2s'
-                    }}
-                    onClick={() => fileInputRef.current?.click()}
-                    onMouseEnter={(e) => { e.currentTarget.style.borderColor = 'var(--navy-500)'; e.currentTarget.style.background = 'var(--navy-50)' }}
-                    onMouseLeave={(e) => { e.currentTarget.style.borderColor = 'var(--gray-300)'; e.currentTarget.style.background = 'var(--gray-50)' }}
-                  >
-                    <input 
-                      type="file" 
-                      ref={fileInputRef} 
-                      onChange={handleFileChange} 
-                      style={{ display: 'none' }}
-                      accept=".pdf,.dwg,.doc,.docx,.xls,.xlsx,.zip,.jpg,.jpeg,.png"
-                    />
-                    <div style={{ width: '48px', height: '48px', borderRadius: '50%', background: 'white', display: 'flex', alignItems: 'center', justifyContent: 'center', boxShadow: 'var(--shadow-sm)', color: 'var(--navy-600)' }}>
-                      <File size={24} />
-                    </div>
-                    <div style={{ textAlign: 'center' }}>
-                      <p style={{ fontWeight: 600, color: 'var(--gray-900)', fontSize: '14px' }}>
-                        {selectedFile ? selectedFile.name : 'Klik untuk memilih file'}
-                      </p>
-                      <p style={{ fontSize: '12px', color: 'var(--gray-500)', marginTop: '4px' }}>
-                        {selectedFile ? formatFileSize(selectedFile.size) : 'PDF, DWG, Office, Image, Zip (Max 50MB)'}
-                      </p>
-                    </div>
-                  </div>
-                </div>
-
-                <div style={{ display: 'flex', justifyContent: 'flex-end', gap: '12px', marginTop: '8px', paddingTop: '24px', borderTop: '1px solid var(--gray-100)' }}>
-                  <button type="button" className="btn btn-ghost" style={{ padding: '10px 24px', borderRadius: '10px', fontWeight: 600 }} onClick={() => setIsModalOpen(false)}>Batal</button>
-                  <button type="submit" className="btn btn-primary" style={{ padding: '10px 24px', borderRadius: '10px', fontWeight: 600, display: 'flex', gap: '8px', alignItems: 'center' }} disabled={uploading}>
-                    {uploading ? 'Mengunggah...' : <><UploadCloud size={18} /> Unggah & Simpan</>}
-                  </button>
-                </div>
-              </form>
-            </motion.div>
-          </motion.div>
-        )}
-      </AnimatePresence>
-    </motion.div>
+            <div className="form-group">
+              <span className="form-label required">File dokumen</span>
+              <div
+                role="button"
+                tabIndex={0}
+                className={`dropzone ${dragging ? 'dragging' : ''}`}
+                onClick={() => fileInputRef.current?.click()}
+                onKeyDown={(e) => (e.key === 'Enter' || e.key === ' ') && fileInputRef.current?.click()}
+                onDragOver={(e) => { e.preventDefault(); setDragging(true) }}
+                onDragLeave={() => setDragging(false)}
+                onDrop={(e) => { e.preventDefault(); setDragging(false); if (e.dataTransfer.files?.[0]) setSelectedFile(e.dataTransfer.files[0]) }}
+              >
+                <input type="file" ref={fileInputRef} hidden onChange={(e) => e.target.files?.[0] && setSelectedFile(e.target.files[0])} accept=".pdf,.dwg,.doc,.docx,.xls,.xlsx,.zip,.jpg,.jpeg,.png" />
+                <File size={30} />
+                <strong>{selectedFile ? selectedFile.name : 'Klik untuk memilih file, atau seret ke sini'}</strong>
+                <span>{selectedFile ? formatFileSize(selectedFile.size) : 'PDF, DWG, Office, gambar, atau ZIP — maksimal 4 MB'}</span>
+              </div>
+            </div>
+          </form>
+        </Modal>
+      )}
+    </div>
   )
 }

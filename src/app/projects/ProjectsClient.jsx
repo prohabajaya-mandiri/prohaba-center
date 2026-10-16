@@ -1,353 +1,219 @@
 'use client';
 import { apiFetch } from '@/lib/client-api';
 
-import { useState } from 'react';
+import { useMemo, useState } from 'react';
 import { useRouter } from 'next/navigation';
-import { Building2, Plus, Calendar, MapPin, Search, Trash2, Pencil } from 'lucide-react';
+import { Building2, Plus, Calendar, MapPin, Trash2, Pencil, Wallet } from 'lucide-react';
 import { useDialog } from '@/components/DialogProvider';
+import { Modal, SearchField, StatusBadge } from '@/components/ui';
+import { idr, fmtDate } from '@/lib/ui-labels';
+
+const EMPTY = { code: '', name: '', client: '', location: '', contractValue: '', startDate: '', endDate: '', status: 'ACTIVE' };
+const toDateInput = (v) => (v ? new Date(v).toISOString().split('T')[0] : '');
 
 export default function ProjectsClient({ initialProjects, user }) {
   const router = useRouter();
   const [projects, setProjects] = useState(initialProjects);
-  const [showModal, setShowModal] = useState(false);
-  const [editingProject, setEditingProject] = useState(null); // project being edited
+  const [search, setSearch] = useState('');
+  const [form, setForm] = useState(null); // null = tertutup; { id? , ...field }
   const [isSubmitting, setIsSubmitting] = useState(false);
   const { showAlert, showConfirm } = useDialog();
 
-  const handleDeleteProject = async (id, code) => {
+  const canCreate = ['TOP_MANAGEMENT', 'PJO'].includes(user?.role);
+  const canManage = user?.role === 'TOP_MANAGEMENT';
+
+  const filtered = useMemo(() => {
+    const q = search.trim().toLowerCase();
+    if (!q) return projects;
+    return projects.filter((p) =>
+      [p.code, p.name, p.client, p.location].some((v) => (v || '').toLowerCase().includes(q)),
+    );
+  }, [projects, search]);
+
+  const set = (key) => (e) => setForm((f) => ({ ...f, [key]: e.target.value }));
+
+  const openCreate = () => setForm({ ...EMPTY });
+  const openEdit = (p) => setForm({
+    id: p.id,
+    code: p.code,
+    name: p.name,
+    client: p.client || '',
+    location: p.location || '',
+    contractValue: p.contractValue ?? '',
+    startDate: toDateInput(p.startDate),
+    endDate: toDateInput(p.endDate),
+    status: p.status || 'ACTIVE',
+  });
+
+  const handleArchive = async (p) => {
     const confirmed = await showConfirm(
-      `Apakah Anda yakin ingin mengarsipkan proyek ${code}? Data dan histori proyek tetap disimpan.`,
-      'Hapus Permanen Proyek'
+      `Arsipkan proyek ${p.code} — ${p.name}? Proyek tidak tampil lagi di daftar, tetapi data dan riwayatnya tetap disimpan.`,
+      'Arsipkan proyek',
     );
     if (!confirmed) return;
-
     try {
-      const res = await apiFetch(`/api/projects/${id}`, { method: 'DELETE' });
-      if (!res.ok) {
-        const error = await res.json();
-        throw new Error(error.error || 'Gagal menghapus proyek');
-      }
-      setProjects(prev => prev.filter(p => p.id !== id));
-      await showAlert('Proyek berhasil diarsipkan.', 'Sukses');
+      await apiFetch(`/api/projects/${p.id}`, { method: 'DELETE' });
+      setProjects((prev) => prev.filter((x) => x.id !== p.id));
       router.refresh();
+      await showAlert('Proyek berhasil diarsipkan.', 'Berhasil');
     } catch (error) {
-      await showAlert(error.message, 'Error');
+      await showAlert(error.message, 'Gagal');
     }
   };
-  
-  const [formData, setFormData] = useState({
-    code: '', name: '', client: '', location: '', contractValue: '', startDate: '', endDate: ''
-  });
 
   const handleSubmit = async (e) => {
     e.preventDefault();
-    setIsSubmitting(true);
-    try {
-      const res = await apiFetch('/api/projects', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify(formData)
-      });
-      if (!res.ok) {
-        const error = await res.json();
-        throw new Error(error.error || 'Gagal menambahkan proyek');
-      }
-      const newProject = await res.json();
-      setProjects([newProject, ...projects]);
-      setShowModal(false);
-      setFormData({ code: '', name: '', client: '', location: '', contractValue: '', startDate: '', endDate: '' });
-      router.refresh();
-      await showAlert('Proyek berhasil ditambahkan!', 'Sukses');
-    } catch (error) {
-      await showAlert(error.message, 'Error');
-    } finally {
-      setIsSubmitting(false);
+    if (form.startDate && form.endDate && form.endDate < form.startDate) {
+      await showAlert('Tanggal selesai tidak boleh sebelum tanggal mulai.', 'Periksa kembali');
+      return;
     }
-  };
-
-  const handleEditProject = (p) => {
-    setEditingProject({
-      id: p.id,
-      code: p.code,
-      name: p.name,
-      client: p.client || '',
-      location: p.location || '',
-      contractValue: p.contractValue || '',
-      startDate: p.startDate ? new Date(p.startDate).toISOString().split('T')[0] : '',
-      endDate: p.endDate ? new Date(p.endDate).toISOString().split('T')[0] : '',
-      status: p.status || 'ACTIVE',
-    });
-  };
-
-  const handleEditSubmit = async (e) => {
-    e.preventDefault();
     setIsSubmitting(true);
     try {
-      const res = await apiFetch(`/api/projects/${editingProject.id}`, {
-        method: 'PATCH',
+      const editing = Boolean(form.id);
+      const { id, ...body } = form;
+      if (!editing) delete body.status;
+      const res = await apiFetch(editing ? `/api/projects/${id}` : '/api/projects', {
+        method: editing ? 'PATCH' : 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify(editingProject),
+        body: JSON.stringify(body),
       });
-      if (!res.ok) {
-        const error = await res.json();
-        throw new Error(error.error || 'Gagal memperbarui proyek');
-      }
-      const updated = await res.json();
-      setProjects(prev => prev.map(p => p.id === updated.id ? updated : p));
-      setEditingProject(null);
+      const saved = await res.json();
+      setProjects((prev) => (editing ? prev.map((p) => (p.id === saved.id ? saved : p)) : [saved, ...prev]));
+      setForm(null);
       router.refresh();
-      await showAlert('Proyek berhasil diperbarui!', 'Sukses');
+      await showAlert(editing ? 'Perubahan proyek tersimpan.' : 'Proyek baru berhasil ditambahkan.', 'Berhasil');
     } catch (error) {
-      await showAlert(error.message, 'Error');
+      await showAlert(error.message, 'Gagal');
     } finally {
       setIsSubmitting(false);
     }
   };
 
   return (
-    <div style={{ display: 'flex', flexDirection: 'column', gap: 20 }}>
-      {/* Action Bar */}
-      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-        <div style={{ position: 'relative', width: 300 }}>
-          <Search size={16} style={{ position: 'absolute', left: 12, top: 10, color: 'var(--gray-400)' }} />
-          <input type="text" className="form-input" placeholder="Cari proyek..." style={{ paddingLeft: 36 }} />
+    <div className="stack">
+      <div className="toolbar">
+        <SearchField value={search} onChange={setSearch} placeholder="Cari kode, nama, klien, atau lokasi" />
+        <div className="spacer" />
+        {canCreate && (
+          <button className="btn btn-primary" onClick={openCreate}>
+            <Plus aria-hidden /> Tambah proyek
+          </button>
+        )}
+      </div>
+
+      {filtered.length === 0 ? (
+        <div className="card empty-state">
+          <Building2 aria-hidden />
+          <h3>{projects.length ? 'Tidak ada proyek yang cocok' : 'Belum ada proyek'}</h3>
+          <p>{projects.length ? 'Coba kata kunci lain.' : 'Proyek yang ditambahkan akan tampil di sini.'}</p>
         </div>
-        <button className="btn btn-primary" onClick={() => setShowModal(true)}>
-          <Plus size={16} className="inline-block mr-2" />
-          Tambah Proyek Baru
-        </button>
-      </div>
-
-      {/* Projects Grid */}
-      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(300px, 1fr))', gap: 20 }}>
-        {projects.map(p => (
-          <div key={p.id} className="card" style={{ transition: 'all 0.2s', cursor: 'pointer' }}>
-            <div className="card-body">
-              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: 12 }}>
-                <div style={{ display: 'flex', gap: 12, alignItems: 'center' }}>
-                  <div style={{ 
-                    width: 40, height: 40, borderRadius: 8, background: 'var(--navy-50)',
-                    display: 'flex', alignItems: 'center', justifyContent: 'center', color: 'var(--navy-600)'
-                  }}>
-                    <Building2 size={20} />
-                  </div>
-                  <div>
-                    <div style={{ fontWeight: 700, color: 'var(--gray-900)' }}>{p.code}</div>
-                    <div style={{ fontSize: 13, color: 'var(--gray-500)' }}>{p.client}</div>
+      ) : (
+        <div className="project-grid">
+          {filtered.map((p) => (
+            <article key={p.id} className="card project-card">
+              <div className="project-card-header">
+                <div style={{ display: 'flex', gap: 12, alignItems: 'center', minWidth: 0 }}>
+                  <div className="project-icon"><Building2 size={20} /></div>
+                  <div style={{ minWidth: 0 }}>
+                    <div className="project-code">{p.code}</div>
+                    <div className="project-client truncate">{p.client || 'Klien belum diisi'}</div>
                   </div>
                 </div>
-                <div style={{ display: 'flex', gap: 8, alignItems: 'center' }}>
-                  <span className={`badge ${p.status === 'ACTIVE' ? 'badge-success' : 'badge-gray'}`}>
-                    {p.status}
-                  </span>
-                  {user?.role === 'TOP_MANAGEMENT' && (
-                    <>
-                      <button
-                        onClick={(e) => { e.stopPropagation(); handleEditProject(p); }}
-                        style={{
-                          background: 'none', border: 'none', padding: 6,
-                          borderRadius: 6, color: 'var(--navy-600)', cursor: 'pointer',
-                          display: 'flex', alignItems: 'center', justifyContent: 'center',
-                          backgroundColor: 'var(--navy-50)'
-                        }}
-                        title="Edit Proyek"
-                        onMouseEnter={(e) => e.currentTarget.style.backgroundColor = 'var(--navy-100)'}
-                        onMouseLeave={(e) => e.currentTarget.style.backgroundColor = 'var(--navy-50)'}
-                      >
-                        <Pencil size={16} />
-                      </button>
-                      <button
-                        onClick={(e) => { e.stopPropagation(); handleDeleteProject(p.id, p.code); }}
-                        style={{
-                          background: 'none', border: 'none', padding: 6,
-                          borderRadius: 6, color: 'var(--red-500)', cursor: 'pointer',
-                          display: 'flex', alignItems: 'center', justifyContent: 'center',
-                          backgroundColor: 'var(--red-50)'
-                        }}
-                        title="Hapus Proyek"
-                        onMouseEnter={(e) => e.currentTarget.style.backgroundColor = 'var(--red-100)'}
-                        onMouseLeave={(e) => e.currentTarget.style.backgroundColor = 'var(--red-50)'}
-                      >
-                        <Trash2 size={16} />
-                      </button>
-                    </>
-                  )}
-                </div>
-              </div>
-              
-              <div style={{ fontWeight: 600, color: 'var(--navy-700)', marginBottom: 16, lineHeight: 1.4 }}>
-                {p.name}
+                <StatusBadge value={p.status} />
               </div>
 
-              <div style={{ display: 'flex', flexDirection: 'column', gap: 8, fontSize: 13, color: 'var(--gray-600)' }}>
-                <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
-                  <MapPin size={14} /> {p.location}
-                </div>
-                <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
-                  <Calendar size={14} /> {new Date(p.startDate).toLocaleDateString('id-ID')} - {new Date(p.endDate).toLocaleDateString('id-ID')}
-                </div>
+              <div className="project-name">{p.name}</div>
+
+              <div className="project-meta">
+                <div className="project-meta-item"><MapPin size={15} /> {p.location || '-'}</div>
+                <div className="project-meta-item"><Calendar size={15} /> {fmtDate(p.startDate)} – {fmtDate(p.endDate)}</div>
+                <div className="project-meta-item"><Wallet size={15} /> Nilai kontrak {idr(p.contractValue)}</div>
               </div>
-            </div>
-          </div>
-        ))}
-      </div>
 
-      {/* Add Project Modal */}
-      {showModal && (
-        <div style={{
-          position: 'fixed', top: 0, left: 0, right: 0, bottom: 0,
-          background: 'rgba(0,0,0,0.5)', zIndex: 1000,
-          display: 'flex', alignItems: 'center', justifyContent: 'center'
-        }}>
-          <div className="card" style={{ width: 500, maxHeight: '90vh', overflowY: 'auto' }}>
-            <div className="card-header" style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-              <div className="card-title">Tambah Proyek Baru</div>
-              <button onClick={() => setShowModal(false)} style={{ background: 'none', border: 'none', fontSize: 20, cursor: 'pointer' }}>&times;</button>
-            </div>
-            <div className="card-body">
-              <form onSubmit={handleSubmit} className="form-grid" style={{ display: 'flex', flexDirection: 'column', gap: 16 }}>
-                
-                <div className="form-group">
-                  <label className="form-label required">Kode Proyek</label>
-                  <input type="text" className="form-input" required placeholder="Contoh: PRJ-002"
-                    value={formData.code} onChange={e => setFormData({...formData, code: e.target.value})} />
-                </div>
-
-                <div className="form-group">
-                  <label className="form-label required">Nama Proyek</label>
-                  <input type="text" className="form-input" required
-                    value={formData.name} onChange={e => setFormData({...formData, name: e.target.value})} />
-                </div>
-
-                <div className="form-group">
-                  <label className="form-label required">Klien / Pemilik</label>
-                  <input type="text" className="form-input" required
-                    value={formData.client} onChange={e => setFormData({...formData, client: e.target.value})} />
-                </div>
-
-                <div className="form-group">
-                  <label className="form-label required">Lokasi</label>
-                  <input type="text" className="form-input" required
-                    value={formData.location} onChange={e => setFormData({...formData, location: e.target.value})} />
-                </div>
-
-                <div className="form-group">
-                  <label className="form-label required">Nilai Kontrak (Rp)</label>
-                  <input type="number" className="form-input" required
-                    value={formData.contractValue} onChange={e => setFormData({...formData, contractValue: e.target.value})} />
-                </div>
-
-                <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 16 }}>
-                  <div className="form-group">
-                    <label className="form-label required">Tanggal Mulai</label>
-                    <input type="date" className="form-input" required
-                      value={formData.startDate} onChange={e => setFormData({...formData, startDate: e.target.value})} />
-                  </div>
-                  <div className="form-group">
-                    <label className="form-label required">Tanggal Selesai</label>
-                    <input type="date" className="form-input" required
-                      value={formData.endDate} onChange={e => setFormData({...formData, endDate: e.target.value})} />
-                  </div>
-                </div>
-
-                <div style={{ display: 'flex', justifyContent: 'flex-end', gap: 10, marginTop: 10 }}>
-                  <button type="button" className="btn btn-outline" onClick={() => setShowModal(false)}>Batal</button>
-                  <button type="submit" className="btn btn-primary" disabled={isSubmitting}>
-                    {isSubmitting ? 'Menyimpan...' : 'Simpan Proyek'}
+              {canManage && (
+                <div className="row-actions" style={{ marginTop: 14, justifyContent: 'flex-start' }}>
+                  <button className="btn btn-outline btn-sm" onClick={() => openEdit(p)}>
+                    <Pencil aria-hidden /> Ubah
+                  </button>
+                  <button className="btn btn-danger-outline btn-sm" onClick={() => handleArchive(p)}>
+                    <Trash2 aria-hidden /> Arsipkan
                   </button>
                 </div>
-              </form>
-            </div>
-          </div>
+              )}
+            </article>
+          ))}
         </div>
       )}
-      {/* Edit Project Modal */}
-      {editingProject && (
-        <div style={{
-          position: 'fixed', top: 0, left: 0, right: 0, bottom: 0,
-          background: 'rgba(0,0,0,0.5)', zIndex: 1000,
-          display: 'flex', alignItems: 'center', justifyContent: 'center'
-        }}>
-          <div className="card" style={{ width: 500, maxHeight: '90vh', overflowY: 'auto' }}>
-            <div className="card-header" style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-              <div className="card-title">Edit Proyek — {editingProject.code}</div>
-              <button onClick={() => setEditingProject(null)} style={{ background: 'none', border: 'none', fontSize: 20, cursor: 'pointer' }}>&times;</button>
+
+      {form && (
+        <Modal
+          title={form.id ? `Ubah proyek — ${form.code}` : 'Tambah proyek baru'}
+          subtitle={form.id ? 'Perubahan nilai kontrak akan menghitung ulang bobot item BOQ.' : 'Lengkapi data kontrak proyek.'}
+          onClose={() => setForm(null)}
+          busy={isSubmitting}
+          footer={
+            <>
+              <button type="button" className="btn btn-outline" onClick={() => setForm(null)} disabled={isSubmitting}>Batal</button>
+              <button type="submit" form="project-form" className="btn btn-primary" disabled={isSubmitting}>
+                {isSubmitting ? 'Menyimpan…' : form.id ? 'Simpan perubahan' : 'Simpan proyek'}
+              </button>
+            </>
+          }
+        >
+          <form id="project-form" onSubmit={handleSubmit} className="form-stack">
+            <div className="form-grid">
+              <div className="form-group">
+                <label className="form-label required" htmlFor="pj-code">Kode proyek</label>
+                <input id="pj-code" className="form-input" required placeholder="Contoh: PRJ-002" value={form.code} onChange={set('code')} />
+              </div>
+              {form.id ? (
+                <div className="form-group">
+                  <label className="form-label" htmlFor="pj-status">Status</label>
+                  <select id="pj-status" className="form-select" value={form.status} onChange={set('status')}>
+                    <option value="ACTIVE">Aktif</option>
+                    <option value="ON_HOLD">Ditunda</option>
+                    <option value="COMPLETED">Selesai</option>
+                  </select>
+                </div>
+              ) : (
+                <div className="form-group">
+                  <label className="form-label required" htmlFor="pj-value">Nilai kontrak (Rp)</label>
+                  <input id="pj-value" type="number" min="0" className="form-input" required value={form.contractValue} onChange={set('contractValue')} />
+                </div>
+              )}
             </div>
-            <div className="card-body">
-              <form onSubmit={handleEditSubmit} style={{ display: 'flex', flexDirection: 'column', gap: 16 }}>
-                <div className="grid" style={{ gridTemplateColumns: '1fr 1fr', gap: 16 }}>
-                  <div className="form-group">
-                    <label className="form-label required">Kode Proyek</label>
-                    <input type="text" className="form-input" required
-                      value={editingProject.code}
-                      onChange={e => setEditingProject({...editingProject, code: e.target.value})} />
-                  </div>
-                  <div className="form-group">
-                    <label className="form-label">Status</label>
-                    <select className="form-input form-select"
-                      value={editingProject.status}
-                      onChange={e => setEditingProject({...editingProject, status: e.target.value})}>
-                      <option value="ACTIVE">Active</option>
-                      <option value="COMPLETED">Completed</option>
-                      <option value="ON_HOLD">On Hold</option>
-                      <option value="CANCELLED">Cancelled</option>
-                    </select>
-                  </div>
-                </div>
-
-                <div className="form-group">
-                  <label className="form-label required">Nama Proyek</label>
-                  <input type="text" className="form-input" required
-                    value={editingProject.name}
-                    onChange={e => setEditingProject({...editingProject, name: e.target.value})} />
-                </div>
-
-                <div className="form-group">
-                  <label className="form-label required">Klien / Pemilik</label>
-                  <input type="text" className="form-input" required
-                    value={editingProject.client}
-                    onChange={e => setEditingProject({...editingProject, client: e.target.value})} />
-                </div>
-
-                <div className="form-group">
-                  <label className="form-label required">Lokasi</label>
-                  <input type="text" className="form-input" required
-                    value={editingProject.location}
-                    onChange={e => setEditingProject({...editingProject, location: e.target.value})} />
-                </div>
-
-                <div className="form-group">
-                  <label className="form-label required">Nilai Kontrak (Rp)</label>
-                  <input type="number" className="form-input" required
-                    value={editingProject.contractValue}
-                    onChange={e => setEditingProject({...editingProject, contractValue: e.target.value})} />
-                </div>
-
-                <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 16 }}>
-                  <div className="form-group">
-                    <label className="form-label required">Tanggal Mulai</label>
-                    <input type="date" className="form-input" required
-                      value={editingProject.startDate}
-                      onChange={e => setEditingProject({...editingProject, startDate: e.target.value})} />
-                  </div>
-                  <div className="form-group">
-                    <label className="form-label required">Tanggal Selesai</label>
-                    <input type="date" className="form-input" required
-                      value={editingProject.endDate}
-                      onChange={e => setEditingProject({...editingProject, endDate: e.target.value})} />
-                  </div>
-                </div>
-
-                <div style={{ display: 'flex', justifyContent: 'flex-end', gap: 10, marginTop: 10 }}>
-                  <button type="button" className="btn btn-outline" onClick={() => setEditingProject(null)}>Batal</button>
-                  <button type="submit" className="btn btn-primary" disabled={isSubmitting}>
-                    {isSubmitting ? 'Menyimpan...' : 'Simpan Perubahan'}
-                  </button>
-                </div>
-              </form>
+            <div className="form-group">
+              <label className="form-label required" htmlFor="pj-name">Nama proyek</label>
+              <input id="pj-name" className="form-input" required value={form.name} onChange={set('name')} />
             </div>
-          </div>
-        </div>
+            <div className="form-grid">
+              <div className="form-group">
+                <label className="form-label required" htmlFor="pj-client">Klien / pemilik</label>
+                <input id="pj-client" className="form-input" required value={form.client} onChange={set('client')} />
+              </div>
+              <div className="form-group">
+                <label className="form-label required" htmlFor="pj-loc">Lokasi</label>
+                <input id="pj-loc" className="form-input" required value={form.location} onChange={set('location')} />
+              </div>
+            </div>
+            {form.id && (
+              <div className="form-group">
+                <label className="form-label required" htmlFor="pj-value">Nilai kontrak (Rp)</label>
+                <input id="pj-value" type="number" min="0" className="form-input" required value={form.contractValue} onChange={set('contractValue')} />
+              </div>
+            )}
+            <div className="form-grid">
+              <div className="form-group">
+                <label className="form-label required" htmlFor="pj-start">Tanggal mulai</label>
+                <input id="pj-start" type="date" className="form-input" required value={form.startDate} onChange={set('startDate')} />
+              </div>
+              <div className="form-group">
+                <label className="form-label required" htmlFor="pj-end">Tanggal selesai</label>
+                <input id="pj-end" type="date" className="form-input" required min={form.startDate || undefined} value={form.endDate} onChange={set('endDate')} />
+              </div>
+            </div>
+          </form>
+        </Modal>
       )}
     </div>
   );

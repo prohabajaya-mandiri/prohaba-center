@@ -7,6 +7,8 @@ import { prisma } from '@/lib/prisma';
 import AppLayout from '@/components/AppLayout';
 import MaterialRequestClient from './MaterialRequestClient';
 
+export const metadata = { title: 'Material Request' };
+
 export default async function MaterialRequestPage({searchParams}) {
   const session = await auth();
   if (!session?.user) redirect('/login');

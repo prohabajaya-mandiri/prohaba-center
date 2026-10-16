@@ -5,15 +5,20 @@ import { canAccess } from "@/lib/access";
 import { balances, payablesSummary } from "@/lib/services/reports";
 import AppLayout from "@/components/AppLayout";
 import DashboardClient from "./DashboardClient";
+
+export const metadata = { title: 'Dashboard' };
 export default async function DashboardPage() {
   const session = await auth();
   if (!session?.user) redirect("/login");
   const financial = canAccess(session.user.role, "/finance");
   const [total, active, projects, finance] = await Promise.all([
-    prisma.project.count(),
+    prisma.project.count({ where: { status: { not: "ARCHIVED" } } }),
     prisma.project.count({ where: { status: "ACTIVE" } }),
     prisma.project.findMany({
+      where: { status: { not: "ARCHIVED" } },
       select: {
+        client: true,
+        location: true,
         id: true,
         code: true,
         name: true,

@@ -8,7 +8,7 @@ import LogistikClient from './LogistikClient';
 import AppLayout from '@/components/AppLayout';
 
 export const metadata = {
-  title: 'Logistik & Alat Berat - ERP Prohaba',
+  title: 'Logistik & Kendaraan',
 };
 
 export default async function LogistikPage({searchParams}) {
@@ -46,7 +46,7 @@ export default async function LogistikPage({searchParams}) {
 
   return (
     <AppLayout title="Kendaraan & Alat Berat" subtitle="Monitoring pemakaian BBM dan perawatan logistik." user={session?.user}>
-      <p>Ringkasan pemakaian dan deteksi anomali dihitung dari riwayat pada halaman ini (50 catatan per jenis).</p><LogistikClient
+      <LogistikClient
         user={session?.user} 
         vehicles={vehicles} 
         fuelLogs={fuelLogs} 

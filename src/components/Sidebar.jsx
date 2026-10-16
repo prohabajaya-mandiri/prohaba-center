@@ -1,27 +1,17 @@
 'use client';
 
 import Link from 'next/link';
+import Image from 'next/image';
 import { usePathname } from 'next/navigation';
 import { signOut } from 'next-auth/react';
 import {
   LayoutDashboard, Building2, LineChart, Ruler,
   Wrench, Package, ShoppingCart, ShoppingBag,
-  DollarSign, Banknote, Users, Calendar,
-  CreditCard, UserCog, History, LogOut,
-  Truck
+  Landmark, Banknote, Users, CreditCard, UserCog,
+  Database, History, LogOut, Truck, X,
 } from 'lucide-react';
 import { useDialog } from './DialogProvider';
-
-
-const ROLE_LABELS = {
-  TOP_MANAGEMENT: 'Top Management',
-  HRD: 'HRD',
-  PJO: 'P.J. Operasional',
-  LOGISTIK: 'Logistik & Procurement',
-  FINANCE: 'Finance',
-  ENGINEERING: 'Engineering',
-  WORKSHOP: 'Workshop',
-};
+import { ROLE_LABELS, initials } from '@/lib/ui-labels';
 
 const NAV_ITEMS = [
   {
@@ -38,7 +28,7 @@ const NAV_ITEMS = [
       { href: '/documents', label: 'Dokumen Engineering', icon: Ruler, roles: ['TOP_MANAGEMENT', 'ENGINEERING', 'PJO', 'WORKSHOP'] },
       { href: '/workshop', label: 'Workshop', icon: Wrench, roles: ['TOP_MANAGEMENT', 'ENGINEERING', 'WORKSHOP', 'PJO'] },
       { href: '/material-request', label: 'Material Request', icon: Package, roles: ['TOP_MANAGEMENT', 'PJO', 'LOGISTIK'] },
-            { href: '/logistik', label: 'Logistik & Kendaraan', icon: Truck, roles: ['TOP_MANAGEMENT', 'PJO', 'LOGISTIK'] },
+      { href: '/logistik', label: 'Logistik & Kendaraan', icon: Truck, roles: ['TOP_MANAGEMENT', 'PJO', 'LOGISTIK'] },
       { href: '/procurement', label: 'Procurement & PO', icon: ShoppingCart, roles: ['TOP_MANAGEMENT', 'LOGISTIK', 'FINANCE'] },
       { href: '/site-purchase', label: 'Pembelian Site', icon: ShoppingBag, roles: ['TOP_MANAGEMENT', 'PJO', 'LOGISTIK', 'FINANCE'] },
     ],
@@ -46,7 +36,7 @@ const NAV_ITEMS = [
   {
     section: 'Keuangan',
     items: [
-      { href: '/finance', label: 'Keuangan & AP', icon: DollarSign, roles: ['TOP_MANAGEMENT', 'FINANCE'] },
+      { href: '/finance', label: 'Keuangan & Hutang', icon: Landmark, roles: ['TOP_MANAGEMENT', 'FINANCE'] },
       { href: '/revenue', label: 'Pendapatan', icon: Banknote, roles: ['TOP_MANAGEMENT', 'FINANCE'] },
     ],
   },
@@ -60,73 +50,62 @@ const NAV_ITEMS = [
   {
     section: 'Sistem',
     items: [
-      { href: '/master-data', label: 'Master Data', icon: UserCog, roles: ['TOP_MANAGEMENT','HRD','LOGISTIK','FINANCE'] },
+      { href: '/master-data', label: 'Master Data', icon: Database, roles: ['TOP_MANAGEMENT', 'HRD', 'LOGISTIK', 'FINANCE'] },
       { href: '/users', label: 'Pengguna', icon: UserCog, roles: ['TOP_MANAGEMENT'] },
       { href: '/audit-log', label: 'Audit Log', icon: History, roles: ['TOP_MANAGEMENT'] },
-          ],
+    ],
   },
 ];
 
 export default function Sidebar({ user, isOpen, setIsOpen }) {
   const pathname = usePathname();
-  const session = user ? { user } : null;
   const { showConfirm } = useDialog();
-  const userRole = session?.user?.role || 'GUEST';
+  if (!user) return null;
 
-  const initials = session?.user?.name
-    ? session.user.name.split(' ').map(n => n[0]).slice(0, 2).join('').toUpperCase()
-    : 'U';
-
-  const hasAccess = (roles) => roles.includes('ALL') || roles.includes(userRole);
-
-  if (!session) return null; // Don't render sidebar if not logged in
+  const role = user.role || 'GUEST';
+  const hasAccess = (roles) => roles.includes('ALL') || roles.includes(role);
 
   const handleLogout = async () => {
-    const confirmed = await showConfirm('Apakah Anda yakin ingin keluar dari aplikasi?');
-    if (confirmed) {
+    if (await showConfirm('Apakah Anda yakin ingin keluar dari aplikasi?', 'Keluar')) {
       signOut({ callbackUrl: '/login' });
     }
   };
 
   return (
-    <aside className={`sidebar ${isOpen ? 'open' : ''}`}>
-      {/* Logo */}
+    <aside className={`sidebar ${isOpen ? 'open' : ''}`} aria-label="Navigasi utama">
       <div className="sidebar-logo">
-        <div className="sidebar-logo-inner">
-          <div className="sidebar-logo-icon">P</div>
-          <div className="sidebar-logo-text">
-            <div className="sidebar-logo-name">Prohaba Jaya Mandiri</div>
-            <div className="sidebar-logo-sub">ERP Konstruksi</div>
-          </div>
-        </div>
+        <Link href="/dashboard" style={{ display: 'flex', alignItems: 'center', gap: 12, minWidth: 0, color: 'inherit' }}>
+          <Image src="/brand/prohaba-mark.png" alt="Logo Prohaba Jaya Mandiri" width={46} height={40} priority />
+          <span className="sidebar-logo-text">
+            <span className="sidebar-logo-name" style={{ display: 'block' }}>Prohaba Jaya Mandiri</span>
+            <span className="sidebar-logo-sub" style={{ display: 'block' }}>ERP Konstruksi</span>
+          </span>
+        </Link>
+        <button type="button" className="sidebar-close" onClick={() => setIsOpen?.(false)} aria-label="Tutup navigasi">
+          <X size={20} />
+        </button>
       </div>
 
-      {/* Navigation */}
       <nav className="sidebar-nav">
         {NAV_ITEMS.map((section) => {
-          const visibleItems = section.items.filter(item => hasAccess(item.roles));
+          const visibleItems = section.items.filter((item) => hasAccess(item.roles));
           if (visibleItems.length === 0) return null;
-
           return (
             <div key={section.section} className="nav-section">
               <div className="nav-section-label">{section.section}</div>
               {visibleItems.map((item) => {
-                const isActive = pathname === item.href ||
-                  (item.href !== '/dashboard' && pathname.startsWith(item.href));
+                const isActive = pathname === item.href || pathname.startsWith(item.href + '/');
                 const Icon = item.icon;
-
                 return (
                   <Link
                     key={item.href}
                     href={item.href}
                     className={`nav-item ${isActive ? 'active' : ''}`}
-                    onClick={() => setIsOpen && setIsOpen(false)}
+                    aria-current={isActive ? 'page' : undefined}
+                    onClick={() => setIsOpen?.(false)}
                   >
-                    <Icon size={18} className="nav-icon" />
+                    <Icon className="nav-icon" aria-hidden />
                     <span>{item.label}</span>
-                    {item.badge && (
-                      <span className="nav-badge">{item.badge}</span>
-                    )}
                   </Link>
                 );
               })}
@@ -135,31 +114,14 @@ export default function Sidebar({ user, isOpen, setIsOpen }) {
         })}
       </nav>
 
-      {/* User Info */}
       <div className="sidebar-footer">
-        <div className="sidebar-user" style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-          <div style={{ display: 'flex', gap: '12px', alignItems: 'center' }}>
-            <div className="user-avatar">{initials}</div>
-            <div className="user-info">
-              <div className="user-name" style={{ fontSize: '13px' }}>{session?.user?.name || 'Pengguna'}</div>
-              <div className="user-role" style={{ fontSize: '11px' }}>{ROLE_LABELS[userRole] || userRole}</div>
-            </div>
+        <div className="sidebar-user">
+          <div className="user-avatar" aria-hidden>{initials(user.name)}</div>
+          <div className="user-info">
+            <div className="user-name">{user.name || 'Pengguna'}</div>
+            <div className="user-role">{ROLE_LABELS[role] || role}</div>
           </div>
-          <button 
-            onClick={handleLogout}
-            style={{ 
-              background: 'transparent', 
-              border: 'none', 
-              color: 'var(--red-500)', 
-              cursor: 'pointer',
-              padding: '4px',
-              display: 'flex',
-              alignItems: 'center',
-              justifyContent: 'center',
-              borderRadius: '4px'
-            }}
-            title="Keluar"
-          >
+          <button type="button" onClick={handleLogout} className="icon-btn danger" title="Keluar" aria-label="Keluar">
             <LogOut size={18} />
           </button>
         </div>

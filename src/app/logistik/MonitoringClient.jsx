@@ -1,7 +1,10 @@
 'use client';
 
 import { useState } from 'react';
-import { Truck, Droplet, Wrench, AlertTriangle, CheckCircle, Clock, TrendingUp, AlertOctagon, Activity, CalendarDays } from 'lucide-react';
+import { Truck, Droplet, Wrench, AlertTriangle, CheckCircle, Clock, TrendingUp, AlertOctagon, Activity } from 'lucide-react';
+import { VEHICLE_TYPE } from '@/lib/ui-labels';
+
+const PERIODS = [['month', 'Bulan ini'], ['quarter', '3 bulan terakhir'], ['year', 'Tahun ini'], ['all', 'Semua data di halaman ini']];
 
 function computeAvgConsumption(logs, vehicleType) {
   const valid = logs.filter(l => l.meterValue && l.liters);
@@ -143,9 +146,9 @@ function detectFuelAnomalies(fuelLogs) {
 }
 
 const ANOMALY_STYLE = {
-  danger:  { color: '#ef4444', bg: '#fef2f2', border: '#fecaca', icon: AlertOctagon },
-  warning: { color: '#f59e0b', bg: '#fffbeb', border: '#fde68a', icon: AlertTriangle },
-  info:    { color: '#3b82f6', bg: '#eff6ff', border: '#bfdbfe', icon: Activity },
+  danger:  { color: 'var(--red-500)', bg: 'var(--red-50)', border: 'var(--red-200)', icon: AlertOctagon },
+  warning: { color: 'var(--yellow-500)', bg: 'var(--yellow-50)', border: 'var(--yellow-100)', icon: AlertTriangle },
+  info:    { color: 'var(--blue-500)', bg: 'var(--blue-50)', border: 'var(--blue-100)', icon: Activity },
 };
 
 export default function MonitoringClient({ vehicles, fuelLogs, maintenanceLogs }) {
@@ -185,20 +188,20 @@ export default function MonitoringClient({ vehicles, fuelLogs, maintenanceLogs }
   const formatDate = (d) => new Date(d).toLocaleDateString('id-ID', { day: '2-digit', month: 'short', year: 'numeric' });
 
   const STATUS_CONFIG = {
-    overdue: { label: 'Lewat Jadwal', color: '#ef4444', bg: '#fef2f2', icon: AlertTriangle },
-    warning: { label: 'Segera Ganti', color: '#f59e0b', bg: '#fffbeb', icon: Clock },
-    ok: { label: 'Normal', color: '#10b981', bg: '#f0fdf4', icon: CheckCircle },
+    overdue: { label: 'Lewat Jadwal', color: 'var(--red-500)', bg: 'var(--red-50)', icon: AlertTriangle },
+    warning: { label: 'Segera Ganti', color: 'var(--yellow-500)', bg: 'var(--yellow-50)', icon: Clock },
+    ok: { label: 'Normal', color: 'var(--green-600)', bg: 'var(--green-50)', icon: CheckCircle },
   };
 
   return (
-    <div style={{ display: 'flex', gap: '24px', alignItems: 'flex-start' }}>
+    <div className="monitor-layout">
       {/* Vehicle Selector Panel */}
-      <div style={{ width: '230px', flexShrink: 0 }}>
+      <div>
         <div className="card">
           <div className="card-header">
-            <div className="card-title">Pilih Kendaraan</div>
+            <div className="card-title">Pilih kendaraan</div>
           </div>
-          <div style={{ padding: '8px' }}>
+          <div className="vehicle-list">
             {vehicles.length === 0 ? (
               <p style={{ padding: '16px', color: 'var(--gray-500)', fontSize: '13px', textAlign: 'center' }}>
                 Belum ada kendaraan.
@@ -212,22 +215,14 @@ export default function MonitoringClient({ vehicles, fuelLogs, maintenanceLogs }
                 const hasWarning = vMaintLogs.some(l => getMaintenanceStatus(l, vMeter) === 'warning');
 
                 return (
-                  <button key={v.id} onClick={() => setSelectedVehicleId(v.id)} style={{
-                    display: 'flex', alignItems: 'center', gap: '10px', width: '100%',
-                    padding: '10px 12px', borderRadius: '8px', border: 'none', cursor: 'pointer',
-                    marginBottom: '4px',
-                    background: selectedVehicleId === v.id ? 'var(--navy-50)' : 'transparent',
-                    color: selectedVehicleId === v.id ? 'var(--navy-700)' : 'var(--gray-700)',
-                    fontWeight: selectedVehicleId === v.id ? 600 : 400,
-                    textAlign: 'left', transition: 'all 0.2s',
-                  }}>
+                  <button key={v.id} type="button" onClick={() => setSelectedVehicleId(v.id)} className={`vehicle-item ${selectedVehicleId === v.id ? 'active' : ''}`} aria-pressed={selectedVehicleId === v.id}>
                     <Truck size={16} style={{ flexShrink: 0 }} />
                     <div style={{ flex: 1, minWidth: 0 }}>
-                      <div style={{ fontSize: '13px', fontWeight: 600, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{v.name}</div>
-                      <div style={{ fontSize: '11px', color: 'var(--gray-500)' }}>{v.code || v.plateNumber || '-'}</div>
+                      <div style={{ fontSize: 14, fontWeight: 600, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{v.name}</div>
+                      <div style={{ fontSize: 12.5, color: 'var(--gray-500)' }}>{v.code || v.plateNumber || '-'}</div>
                     </div>
-                    {hasOverdue && <span style={{ width: '8px', height: '8px', borderRadius: '50%', background: '#ef4444', flexShrink: 0 }} />}
-                    {!hasOverdue && hasWarning && <span style={{ width: '8px', height: '8px', borderRadius: '50%', background: '#f59e0b', flexShrink: 0 }} />}
+                    {hasOverdue && <span className="status-dot" style={{ background: 'var(--red-500)' }} title="Ada servis lewat jadwal" />}
+                    {!hasOverdue && hasWarning && <span className="status-dot" style={{ background: 'var(--yellow-500)' }} title="Servis segera" />}
                   </button>
                 );
               })
@@ -247,17 +242,23 @@ export default function MonitoringClient({ vehicles, fuelLogs, maintenanceLogs }
                 <div>
                   <div style={{ fontSize: '18px', fontWeight: 700, color: 'var(--gray-900)' }}>{selectedVehicle.name}</div>
                   <div style={{ fontSize: '13px', color: 'var(--gray-500)' }}>
-                    {selectedVehicle.type} · {selectedVehicle.plateNumber || 'No Pol: -'} · Kode: {selectedVehicle.code || '-'}
+                    {VEHICLE_TYPE[selectedVehicle.type] ?? selectedVehicle.type} · {selectedVehicle.plateNumber || 'No. pol -'} · Kode {selectedVehicle.code || '-'}
                   </div>
                 </div>
               </div>
-              <div style={{ display: 'flex', gap: '24px', flexWrap: 'wrap' }}>
+              <div style={{ display: 'flex', gap: '24px', flexWrap: 'wrap', alignItems: 'center' }}>
+                <div className="form-group" style={{ marginBottom: 0 }}>
+                  <label className="form-label" htmlFor="mon-period">Periode</label>
+                  <select id="mon-period" className="form-select" value={period} onChange={(e) => setPeriod(e.target.value)} style={{ width: 230 }}>
+                    {PERIODS.map(([v, l]) => <option key={v} value={v}>{l}</option>)}
+                  </select>
+                </div>
                 <div style={{ textAlign: 'center' }}>
                   <div style={{ fontSize: '11px', color: 'var(--gray-500)', textTransform: 'uppercase', letterSpacing: '0.05em' }}>HM / Odometer Terakhir</div>
                   <div style={{ fontSize: '22px', fontWeight: 700, color: 'var(--navy-700)' }}>{currentMeter ? currentMeter.toLocaleString('id-ID') : '-'}</div>
                 </div>
                 <div style={{ textAlign: 'center' }}>
-                  <div style={{ fontSize: '11px', color: 'var(--gray-500)', textTransform: 'uppercase', letterSpacing: '0.05em' }}>Total Pengisian</div>
+                  <div style={{ fontSize: '11px', color: 'var(--gray-500)', textTransform: 'uppercase', letterSpacing: '0.05em' }}>Pengisian (periode)</div>
                   <div style={{ fontSize: '22px', fontWeight: 700, color: 'var(--navy-700)' }}>{vehicleFuelLogs.length}x</div>
                 </div>
               </div>
@@ -269,8 +270,8 @@ export default function MonitoringClient({ vehicles, fuelLogs, maintenanceLogs }
             <div className="card">
               <div className="card-body" style={{ padding: '16px' }}>
                 <div style={{ display: 'flex', alignItems: 'center', gap: '10px', marginBottom: '8px' }}>
-                  <div style={{ width: '36px', height: '36px', borderRadius: '10px', background: '#eff6ff', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
-                    <Droplet size={18} style={{ color: '#3b82f6' }} />
+                  <div style={{ width: '36px', height: '36px', borderRadius: '10px', background: 'var(--blue-50)', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+                    <Droplet size={18} style={{ color: 'var(--blue-500)' }} />
                   </div>
                   <span style={{ fontSize: '13px', color: 'var(--gray-500)' }}>Total BBM</span>
                 </div>
@@ -280,8 +281,8 @@ export default function MonitoringClient({ vehicles, fuelLogs, maintenanceLogs }
             <div className="card">
               <div className="card-body" style={{ padding: '16px' }}>
                 <div style={{ display: 'flex', alignItems: 'center', gap: '10px', marginBottom: '8px' }}>
-                  <div style={{ width: '36px', height: '36px', borderRadius: '10px', background: '#fef3c7', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
-                    <TrendingUp size={18} style={{ color: '#f59e0b' }} />
+                  <div style={{ width: '36px', height: '36px', borderRadius: '10px', background: 'var(--yellow-50)', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+                    <TrendingUp size={18} style={{ color: 'var(--yellow-500)' }} />
                   </div>
                   <span style={{ fontSize: '13px', color: 'var(--gray-500)' }}>Total Biaya BBM</span>
                 </div>
@@ -291,8 +292,8 @@ export default function MonitoringClient({ vehicles, fuelLogs, maintenanceLogs }
             <div className="card">
               <div className="card-body" style={{ padding: '16px' }}>
                 <div style={{ display: 'flex', alignItems: 'center', gap: '10px', marginBottom: '8px' }}>
-                  <div style={{ width: '36px', height: '36px', borderRadius: '10px', background: '#f0fdf4', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
-                    <TrendingUp size={18} style={{ color: '#10b981' }} />
+                  <div style={{ width: '36px', height: '36px', borderRadius: '10px', background: 'var(--green-50)', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+                    <TrendingUp size={18} style={{ color: 'var(--green-600)' }} />
                   </div>
                   <span style={{ fontSize: '13px', color: 'var(--gray-500)' }}>Rata-rata Konsumsi</span>
                 </div>
@@ -303,9 +304,9 @@ export default function MonitoringClient({ vehicles, fuelLogs, maintenanceLogs }
 
           {/* Anomaly Alert Panel */}
           {anomalies.length > 0 && (
-            <div className="card" style={{ marginBottom: '20px', border: '1px solid #fecaca' }}>
-              <div className="card-header" style={{ background: '#fff5f5', borderBottom: '1px solid #fecaca' }}>
-                <div className="card-title" style={{ display: 'flex', alignItems: 'center', gap: '8px', color: '#ef4444' }}>
+            <div className="card" style={{ marginBottom: '20px', border: '1px solid var(--red-200)' }}>
+              <div className="card-header" style={{ background: 'var(--red-50)', borderBottom: '1px solid var(--red-200)' }}>
+                <div className="card-title" style={{ display: 'flex', alignItems: 'center', gap: '8px', color: 'var(--red-500)' }}>
                   <AlertOctagon size={16} />
                   Deteksi Anomali BBM ({anomalies.length} peringatan)
                 </div>
@@ -338,9 +339,9 @@ export default function MonitoringClient({ vehicles, fuelLogs, maintenanceLogs }
           )}
 
           {anomalies.length === 0 && vehicleFuelLogs.length >= 2 && (
-            <div style={{ display: 'flex', alignItems: 'center', gap: '8px', padding: '10px 14px', background: '#f0fdf4', borderRadius: '10px', border: '1px solid #bbf7d0', marginBottom: '20px' }}>
-              <CheckCircle size={16} style={{ color: '#10b981' }} />
-              <span style={{ fontSize: '13px', color: '#065f46', fontWeight: 500 }}>Tidak ada anomali terdeteksi. Konsumsi BBM kendaraan ini terlihat normal.</span>
+            <div style={{ display: 'flex', alignItems: 'center', gap: '8px', padding: '10px 14px', background: 'var(--green-50)', borderRadius: '10px', border: '1px solid var(--green-100)', marginBottom: '20px' }}>
+              <CheckCircle size={16} style={{ color: 'var(--green-600)' }} />
+              <span style={{ fontSize: '13px', color: 'var(--green-700)', fontWeight: 500 }}>Tidak ada anomali terdeteksi. Konsumsi BBM kendaraan ini terlihat normal.</span>
             </div>
           )}
 
@@ -372,7 +373,7 @@ export default function MonitoringClient({ vehicles, fuelLogs, maintenanceLogs }
                       <div key={log.id} style={{
                         display: 'flex', alignItems: 'flex-start', gap: '12px',
                         padding: '14px 16px', borderBottom: '1px solid var(--gray-100)',
-                        background: status === 'overdue' ? '#fef2f2' : status === 'warning' ? '#fffdf0' : 'transparent'
+                        background: status === 'overdue' ? 'var(--red-50)' : status === 'warning' ? 'var(--yellow-50)' : 'transparent'
                       }}>
                         <div style={{ width: '32px', height: '32px', borderRadius: '50%', background: config.bg, display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0 }}>
                           <Icon size={16} style={{ color: config.color }} />

@@ -6,6 +6,8 @@ import AppLayout from "@/components/AppLayout";
 import ListPager from "@/components/ListPager";
 import { pageQuery } from "@/lib/page-query";
 import SitePurchaseClient from "./SitePurchaseClient";
+
+export const metadata = { title: 'Pembelian Site' };
 export default async function SitePage({ searchParams }) {
   const session = await auth();
   if (!session?.user) redirect("/login");

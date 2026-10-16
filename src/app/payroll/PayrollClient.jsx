@@ -1,25 +1,40 @@
 "use client";
 import { useState } from "react";
 import { useRouter } from "next/navigation";
-import { apiFetch } from "@/lib/client-api";
+import { Info, Eye } from "lucide-react";
+import { apiFetch, businessToday } from "@/lib/client-api";
 import { payrollTransition } from "@/lib/payroll-approval";
 import PaymentDialog from "@/components/PaymentDialog";
-const rupiah = (v) =>
-  new Intl.NumberFormat("id-ID", { style: "currency", currency: "IDR" }).format(
-    v,
-  );
+import { EmptyRow, Modal, StatusBadge } from "@/components/ui";
+import { idr } from "@/lib/ui-labels";
+
 const actions = {
   SUBMIT: "Ajukan",
-  HRD_APPROVE: "Setujui HRD",
-  FINANCE_APPROVE: "Setujui Finance",
-  TOP_APPROVE: "Setujui Direktur",
+  HRD_APPROVE: "Setujui (HRD)",
+  FINANCE_APPROVE: "Setujui (Finance)",
+  TOP_APPROVE: "Setujui (Direktur)",
 };
+const STEPS = [
+  ["DRAFT", "Draft"],
+  ["SUBMITTED", "Diajukan"],
+  ["HRD_APPROVED", "HRD"],
+  ["FINANCE_APPROVED", "Finance"],
+  ["APPROVED", "Direktur"],
+  ["PAID", "Dibayar"],
+];
+const MONTHS = ["Januari", "Februari", "Maret", "April", "Mei", "Juni", "Juli", "Agustus", "September", "Oktober", "November", "Desember"];
+const fmtPeriod = (p) => {
+  const [y, m] = String(p || "").split("-");
+  return m ? `${MONTHS[Number(m) - 1]} ${y}` : p;
+};
+
 export default function PayrollClient({ payrolls, projects, accounts, user }) {
   const router = useRouter(),
     [selected, setSelected] = useState(null),
     [error, setError] = useState(""),
     [busy, setBusy] = useState(false),
     [payment, setPayment] = useState(false);
+
   async function run(endpoint, body) {
     setBusy(true);
     setError("");
@@ -39,154 +54,159 @@ export default function PayrollClient({ payrolls, projects, accounts, user }) {
       setBusy(false);
     }
   }
+
+  const stepIndex = selected ? STEPS.findIndex(([s]) => s === selected.status) : -1;
+
   return (
-    <div style={{ display: "grid", gap: 20 }}>
-      {error && (
-        <p role="alert" className="alert alert-danger">
-          {error}
-        </p>
-      )}
+    <div className="stack">
+      {error && !selected && <p role="alert" className="alert alert-danger">{error}</p>}
+
       {["TOP_MANAGEMENT", "HRD"].includes(user.role) && (
-        <form
-          className="card"
-          style={{ padding: 20, display: "flex", gap: 12, flexWrap: "wrap" }}
-          onSubmit={async (e) => {
-            e.preventDefault();
-            await run(
-              "/api/payroll/generate",
-              Object.fromEntries(new FormData(e.currentTarget)),
-            );
-          }}
-        >
-          <select name="projectId" className="form-select" required>
-            <option value="">Pilih proyek</option>
-            {projects.map((p) => (
-              <option key={p.id} value={p.id}>
-                {p.name}
-              </option>
-            ))}
-          </select>
-          <input type="month" name="period" className="form-input" required />
-          <button className="btn btn-primary" disabled={busy}>
-            Buat payroll dari absensi & tarif penugasan
-          </button>
-        </form>
+        <section className="card">
+          <div className="card-header">
+            <div>
+              <div className="card-title">Buat payroll</div>
+              <div className="card-subtitle">Dihitung dari absensi dan tarif penugasan pada periode yang dipilih.</div>
+            </div>
+          </div>
+          <form
+            className="card-body toolbar"
+            onSubmit={async (e) => {
+              e.preventDefault();
+              await run("/api/payroll/generate", Object.fromEntries(new FormData(e.currentTarget)));
+            }}
+          >
+            <div className="form-group" style={{ flex: "1 1 260px" }}>
+              <label className="form-label required" htmlFor="pr-project">Proyek</label>
+              <select id="pr-project" name="projectId" className="form-select" required defaultValue="">
+                <option value="" disabled>Pilih proyek</option>
+                {projects.map((p) => <option key={p.id} value={p.id}>{p.name}</option>)}
+              </select>
+            </div>
+            <div className="form-group">
+              <label className="form-label required" htmlFor="pr-period">Periode</label>
+              <input id="pr-period" type="month" name="period" className="form-input" defaultValue={businessToday().slice(0, 7)} required />
+            </div>
+            <button className="btn btn-primary" disabled={busy}>{busy ? "Memproses…" : "Buat payroll"}</button>
+          </form>
+        </section>
       )}
-      <div className="card" style={{ padding: 20 }}>
-        <table className="data-table">
-          <thead>
-            <tr>
-              <th>Periode</th>
-              <th>Proyek</th>
-              <th>Total</th>
-              <th>Status</th>
-              <th />
-            </tr>
-          </thead>
-          <tbody>
-            {payrolls.map((p) => (
-              <tr key={p.id}>
-                <td>{p.period}</td>
-                <td>{p.projectName}</td>
-                <td>{rupiah(p.totalAmount)}</td>
-                <td>{p.status}</td>
-                <td>
-                  <button
-                    className="btn btn-outline"
-                    onClick={() => setSelected(p)}
-                  >
-                    Rincian
-                  </button>
-                </td>
-              </tr>
-            ))}
-          </tbody>
-        </table>
-        {!payrolls.length && (
-          <p>
-            Belum ada payroll. Isi penugasan dan tarif di Master Data, lalu
-            catat absensi.
-          </p>
-        )}
-      </div>
-      {selected && (
-        <section className="card" style={{ padding: 20 }}>
-          <h2>
-            {selected.projectName} · {selected.period}
-          </h2>
-          <p>
-            Status: {selected.status} · {rupiah(selected.totalAmount)}
-          </p>
-          <table className="data-table">
+
+      <section className="card">
+        <div className="card-header">
+          <div className="card-title">Daftar payroll</div>
+        </div>
+        <div className="table-wrapper">
+          <table>
             <thead>
               <tr>
-                <th>Pegawai</th>
-                <th>Hari hadir</th>
-                <th>Gaji pokok</th>
-                <th>Lembur</th>
-                <th>Total</th>
+                <th>Periode</th>
+                <th>Proyek</th>
+                <th className="num">Total</th>
+                <th>Status</th>
+                <th className="num">Aksi</th>
               </tr>
             </thead>
             <tbody>
-              {selected.items.map((i) => (
-                <tr key={i.id}>
-                  <td>{i.employeeName}</td>
-                  <td>{i.workDays}</td>
-                  <td>{rupiah(i.baseSalary)}</td>
-                  <td>{rupiah(i.overtimePay)}</td>
-                  <td>{rupiah(i.netSalary)}</td>
+              {payrolls.map((p) => (
+                <tr key={p.id}>
+                  <td className="cell-title nowrap">{fmtPeriod(p.period)}</td>
+                  <td>{p.projectName}</td>
+                  <td className="num" style={{ fontWeight: 600, color: "var(--gray-900)" }}>{idr(p.totalAmount)}</td>
+                  <td><StatusBadge value={p.status} /></td>
+                  <td className="num">
+                    <button className="btn btn-outline btn-sm" onClick={() => { setError(""); setSelected(p); }}>
+                      <Eye aria-hidden /> Rincian
+                    </button>
+                  </td>
                 </tr>
               ))}
+              {!payrolls.length && (
+                <EmptyRow colSpan={5} title="Belum ada payroll" hint="Isi penugasan dan tarif di Master Data, catat absensi, lalu buat payroll." />
+              )}
             </tbody>
           </table>
-          <div style={{ display: "flex", gap: 8, marginTop: 16 }}>
-            {Object.entries(actions)
-              .filter(
-                ([action]) =>
-                  payrollTransition(user.role, action)?.from ===
-                  selected.status,
-              )
-              .map(([action, label]) => (
-                <button
-                  key={action}
-                  disabled={busy}
-                  className="btn btn-primary"
-                  onClick={async () => {
-                    const row = await run("/api/payroll/approve", {
-                      payrollId: selected.id,
-                      action,
-                    });
-                    if (row) setSelected({ ...selected, ...row });
-                  }}
-                >
-                  {label}
-                </button>
-              ))}
-            {selected.status === "APPROVED" &&
-              ["TOP_MANAGEMENT", "FINANCE"].includes(user.role) && (
-                <button
-                  className="btn btn-primary"
-                  onClick={() => setPayment(true)}
-                >
-                  Catat pembayaran
-                </button>
+        </div>
+      </section>
+
+      {selected && !payment && (
+        <Modal
+          size="modal-lg"
+          title={`${selected.projectName} · ${fmtPeriod(selected.period)}`}
+          subtitle={`Total ${idr(selected.totalAmount)}`}
+          onClose={() => setSelected(null)}
+          busy={busy}
+          footer={
+            <>
+              <button className="btn btn-outline" onClick={() => setSelected(null)} disabled={busy}>Tutup</button>
+              {Object.entries(actions)
+                .filter(([action]) => payrollTransition(user.role, action)?.from === selected.status)
+                .map(([action, label]) => (
+                  <button
+                    key={action}
+                    disabled={busy}
+                    className="btn btn-primary"
+                    onClick={async () => {
+                      const row = await run("/api/payroll/approve", { payrollId: selected.id, action });
+                      if (row) setSelected({ ...selected, ...row });
+                    }}
+                  >
+                    {label}
+                  </button>
+                ))}
+              {selected.status === "APPROVED" && ["TOP_MANAGEMENT", "FINANCE"].includes(user.role) && (
+                <button className="btn btn-primary" onClick={() => setPayment(true)}>Catat pembayaran</button>
               )}
-            <button
-              className="btn btn-outline"
-              onClick={() => setSelected(null)}
-            >
-              Tutup
-            </button>
+            </>
+          }
+        >
+          <div className="form-stack">
+            {error && <p role="alert" className="alert alert-danger">{error}</p>}
+            <ol className="stepper" aria-label="Tahap persetujuan" style={{ listStyle: "none" }}>
+              {STEPS.map(([s, l], i) => (
+                <li key={s} className={`step ${i < stepIndex ? "done" : i === stepIndex ? "current" : ""}`}>{i + 1}. {l}</li>
+              ))}
+            </ol>
+            <div className="table-wrapper" style={{ border: "1px solid var(--gray-200)", borderRadius: "var(--radius-md)" }}>
+              <table>
+                <thead>
+                  <tr>
+                    <th>Pegawai</th>
+                    <th className="num">Hari hadir</th>
+                    <th className="num">Gaji pokok</th>
+                    <th className="num">Lembur</th>
+                    <th className="num">Total</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {(selected.items ?? []).map((i) => (
+                    <tr key={i.id}>
+                      <td className="cell-title">{i.employeeName}</td>
+                      <td className="num">{i.workDays}</td>
+                      <td className="num">{idr(i.baseSalary)}</td>
+                      <td className="num">{idr(i.overtimePay)}</td>
+                      <td className="num" style={{ fontWeight: 600, color: "var(--gray-900)" }}>{idr(i.netSalary)}</td>
+                    </tr>
+                  ))}
+                  {!selected.items?.length && <EmptyRow colSpan={5} title="Tidak ada rincian pegawai" />}
+                </tbody>
+              </table>
+            </div>
+            <p className="alert alert-info">
+              <Info aria-hidden />
+              Persetujuan tidak berarti gaji sudah dibayar. Perhitungan memakai tarif penugasan dan absensi; tunjangan, potongan, BPJS, dan PPh belum dihitung otomatis.
+            </p>
           </div>
-          <p>Persetujuan tidak menyatakan gaji sudah dibayar. Perhitungan memakai tarif penugasan dan absensi; tunjangan, potongan, BPJS, dan PPh belum dihitung otomatis.</p>
-        </section>
+        </Modal>
       )}
+
       {payment && selected && (
         <PaymentDialog
           endpoint={"/api/payroll/" + selected.id + "/payments"}
           amount={selected.totalAmount}
           accounts={accounts}
           fixed
+          title={`Pembayaran payroll ${fmtPeriod(selected.period)}`}
           onClose={() => setPayment(false)}
           onSuccess={() => {
             setPayment(false);

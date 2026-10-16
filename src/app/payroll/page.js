@@ -6,6 +6,8 @@ import AppLayout from "@/components/AppLayout";
 import ListPager from "@/components/ListPager";
 import { pageQuery } from "@/lib/page-query";
 import PayrollClient from "./PayrollClient";
+
+export const metadata = { title: 'Payroll' };
 export default async function PayrollPage({ searchParams }) {
   const session = await auth();
   if (!session?.user) redirect("/login");

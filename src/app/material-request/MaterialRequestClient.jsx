@@ -3,96 +3,90 @@ import { apiFetch } from '@/lib/client-api';
 
 import { useState } from 'react';
 import { useRouter } from 'next/navigation';
-import { Package, Plus, CheckCircle, Clock, XCircle, FileText } from 'lucide-react';
+import { Plus, FileText, Trash2, Eye, Check } from 'lucide-react';
 import { useDialog } from '@/components/DialogProvider';
+import { EmptyRow, Modal, StatusBadge } from '@/components/ui';
+import { PRIORITY, fmtDate } from '@/lib/ui-labels';
+
+const emptyItem = () => ({ description: '', unit: '', quantity: '' });
 
 export default function MaterialRequestClient({ requests, projects, user }) {
   const router = useRouter();
   const [activeTab, setActiveTab] = useState('list');
   const [selectedProject, setSelectedProject] = useState(projects[0]?.id || '');
-  const [items, setItems] = useState([{ description: '', unit: '', quantity: '' }]);
+  const [items, setItems] = useState([emptyItem()]);
   const [priority, setPriority] = useState('NORMAL');
   const [notes, setNotes] = useState('');
   const [isSubmitting, setIsSubmitting] = useState(false);
-  
-  const { showAlert } = useDialog();
+  const [detail, setDetail] = useState(null);
+  const [approving, setApproving] = useState(null);
+  const { showAlert, showConfirm } = useDialog();
+  const canCreate = ['TOP_MANAGEMENT', 'PJO'].includes(user.role);
 
-  const handleSubmit = async () => {
-    // Validate items
-    const validItems = items.filter(i => i.description.trim() !== '' && i.quantity > 0);
-    if (validItems.length === 0) {
-      await showAlert('Minimal masukkan 1 item yang valid.', 'Peringatan');
+  const updateItem = (index, key, value) => setItems((prev) => prev.map((it, i) => (i === index ? { ...it, [key]: value } : it)));
+
+  const handleSubmit = async (e) => {
+    e.preventDefault();
+    const validItems = items.filter((i) => i.description.trim() !== '' && Number(i.quantity) > 0);
+    if (!selectedProject) {
+      await showAlert('Pilih proyek terlebih dahulu.', 'Peringatan');
       return;
     }
-
+    if (validItems.length === 0) {
+      await showAlert('Masukkan minimal satu item dengan deskripsi dan kuantitas lebih dari 0.', 'Peringatan');
+      return;
+    }
     setIsSubmitting(true);
     try {
-      const payload = {
-        projectId: selectedProject,
-        priority,
-        notes,
-        items: validItems,
-
-      };
-      const res = await apiFetch('/api/material-request', {
+      await apiFetch('/api/material-request', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify(payload)
+        body: JSON.stringify({ projectId: selectedProject, priority, notes, items: validItems }),
       });
-      if (!res.ok) {
-        const error = await res.json();
-        throw new Error(error.error || 'Gagal membuat MR');
-      }
-      await showAlert('Material Request berhasil diajukan!', 'Sukses');
       setActiveTab('list');
-      setItems([{ description: '', unit: '', quantity: '' }]);
+      setItems([emptyItem()]);
       setNotes('');
+      setPriority('NORMAL');
       router.refresh();
+      await showAlert('Material request berhasil diajukan.', 'Berhasil');
     } catch (error) {
-      await showAlert(error.message, 'Error');
+      await showAlert(error.message, 'Gagal');
     } finally {
       setIsSubmitting(false);
     }
   };
 
-  const getStatusBadge = (status) => {
-    switch (status) {
-      case 'DRAFT': return <span className="badge badge-gray">Draft</span>;
-      case 'SUBMITTED': return <span className="badge badge-warning"><Clock size={12} className="mr-1 inline" /> Menunggu Approval</span>;
-      case 'APPROVED': return <span className="badge badge-success"><CheckCircle size={12} className="mr-1 inline" /> Disetujui</span>;
-      case 'PO_CREATED': return <span className="badge badge-info"><Package size={12} className="mr-1 inline" /> PO Dibuat</span>;
-      case 'REJECTED': return <span className="badge badge-danger"><XCircle size={12} className="mr-1 inline" /> Ditolak</span>;
-      default: return <span className="badge">{status}</span>;
-    }
-  };
-
-  const getPriorityBadge = (priority) => {
-    switch (priority) {
-      case 'HIGH':
-      case 'URGENT': return <span className="text-red-600 font-bold text-xs">{priority}</span>;
-      default: return <span className="text-gray-500 font-medium text-xs">{priority}</span>;
+  const approve = async (req) => {
+    if (!(await showConfirm(`Setujui ${req.mrNumber} untuk proyek ${req.project.code}?`, 'Setujui material request'))) return;
+    setApproving(req.id);
+    try {
+      await apiFetch('/api/material-request/' + req.id, { method: 'PATCH', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ status: 'APPROVED' }) });
+      setDetail(null);
+      router.refresh();
+    } catch (e) {
+      await showAlert(e.message, 'Gagal');
+    } finally {
+      setApproving(null);
     }
   };
 
   return (
-    <>
-      <div className="tabs">
-        <button className={`tab ${activeTab === 'list' ? 'active' : ''}`} onClick={() => setActiveTab('list')}>
-          <FileText size={16} className="inline-block mr-2" />
-          Daftar Material Request
-        </button>
-        {['TOP_MANAGEMENT','PJO'].includes(user.role) && (
-          <button className={`tab ${activeTab === 'create' ? 'active' : ''}`} onClick={() => setActiveTab('create')}>
-            <Plus size={16} className="inline-block mr-2" />
-            Buat Request Baru
+    <div className="stack">
+      <div className="card">
+        <div className="tabs" role="tablist">
+          <button role="tab" aria-selected={activeTab === 'list'} className={`tab ${activeTab === 'list' ? 'active' : ''}`} onClick={() => setActiveTab('list')}>
+            <FileText aria-hidden /> Daftar material request
           </button>
-        )}
-      </div>
+          {canCreate && (
+            <button role="tab" aria-selected={activeTab === 'create'} className={`tab ${activeTab === 'create' ? 'active' : ''}`} onClick={() => setActiveTab('create')}>
+              <Plus aria-hidden /> Buat request baru
+            </button>
+          )}
+        </div>
 
-      {activeTab === 'list' && (
-        <div className="card">
-          <div className="card-body p-0">
-            <table className="table">
+        {activeTab === 'list' && (
+          <div className="table-wrapper">
+            <table>
               <thead>
                 <tr>
                   <th>No. MR</th>
@@ -101,83 +95,75 @@ export default function MaterialRequestClient({ requests, projects, user }) {
                   <th>Prioritas</th>
                   <th>Status</th>
                   <th>Tanggal</th>
-                  <th>Aksi</th>
+                  <th className="num">Aksi</th>
                 </tr>
               </thead>
               <tbody>
                 {requests.length === 0 ? (
-                  <tr><td colSpan={7} className="text-center py-8 text-gray-500">Belum ada data Material Request.</td></tr>
-                ) : (
-                  requests.map(req => (
-                    <tr key={req.id}>
-                      <td style={{ fontWeight: 600, color: 'var(--navy-700)' }}>{req.mrNumber}</td>
-                      <td>{req.project.code}</td>
-                      <td>{req.requester.name}</td>
-                      <td>{getPriorityBadge(req.priority)}</td>
-                      <td>{getStatusBadge(req.status)}</td>
-                      <td style={{ fontSize: 12.5, color: 'var(--gray-500)' }}>{new Date(req.createdAt).toLocaleDateString('id-ID')}</td>
-                      <td>
-                        <button className="btn btn-sm btn-outline" onClick={()=>showAlert(req.items.map(i=>i.description+' — '+i.quantity+' '+i.unit).join('\n'),'Detail MR')}>Detail</button>
-                        {['TOP_MANAGEMENT','PJO'].includes(user.role) && req.status === 'SUBMITTED' && (
-                          <button className="btn btn-sm btn-primary ml-2" onClick={async()=>{try{await apiFetch('/api/material-request/'+req.id,{method:'PATCH',headers:{'Content-Type':'application/json'},body:JSON.stringify({status:'APPROVED'})});router.refresh();}catch(e){await showAlert(e.message,'Gagal');}}}>Setujui</button>
+                  <EmptyRow colSpan={7} title="Belum ada material request" hint={canCreate ? 'Buat request baru dari tab di atas.' : undefined} />
+                ) : requests.map((req) => (
+                  <tr key={req.id}>
+                    <td className="cell-title nowrap">{req.mrNumber}</td>
+                    <td>{req.project.code}</td>
+                    <td>{req.requester.name}</td>
+                    <td><StatusBadge value={req.priority} labels={{ [req.priority]: PRIORITY[req.priority]?.[0] }} tones={{ [req.priority]: PRIORITY[req.priority]?.[1] }} /></td>
+                    <td><StatusBadge value={req.status} /></td>
+                    <td className="nowrap">{fmtDate(req.createdAt)}</td>
+                    <td>
+                      <div className="row-actions">
+                        <button className="btn btn-sm btn-outline" onClick={() => setDetail(req)}><Eye aria-hidden /> Detail</button>
+                        {canCreate && req.status === 'SUBMITTED' && (
+                          <button className="btn btn-sm btn-primary" disabled={approving === req.id} onClick={() => approve(req)}><Check aria-hidden /> Setujui</button>
                         )}
-                      </td>
-                    </tr>
-                  ))
-                )}
+                      </div>
+                    </td>
+                  </tr>
+                ))}
               </tbody>
             </table>
           </div>
-        </div>
-      )}
+        )}
 
-      {activeTab === 'create' && (
-        <div className="card">
-          <div className="card-header">
-            <div className="card-title">Form Material Request Baru</div>
-          </div>
-          <div className="card-body">
+        {activeTab === 'create' && (
+          <form className="card-body form-stack" onSubmit={handleSubmit}>
             <div className="form-grid">
               <div className="form-group">
-                <label className="form-label required">Proyek</label>
-                <select className="form-input form-select" value={selectedProject} onChange={e => setSelectedProject(e.target.value)}>
-                  {projects.map(p => (
-                    <option key={p.id} value={p.id}>{p.code} - {p.name}</option>
-                  ))}
+                <label className="form-label required" htmlFor="mr-project">Proyek</label>
+                <select id="mr-project" className="form-select" value={selectedProject} onChange={(e) => setSelectedProject(e.target.value)} required>
+                  {!projects.length && <option value="">Belum ada proyek aktif</option>}
+                  {projects.map((p) => <option key={p.id} value={p.id}>{p.code} — {p.name}</option>)}
                 </select>
               </div>
               <div className="form-group">
-                <label className="form-label required">Prioritas</label>
-                <select className="form-input form-select" value={priority} onChange={e => setPriority(e.target.value)}>
-                  <option value="NORMAL">NORMAL</option>
-                  <option value="HIGH">HIGH</option>
-                  <option value="URGENT">URGENT</option>
+                <label className="form-label required" htmlFor="mr-priority">Prioritas</label>
+                <select id="mr-priority" className="form-select" value={priority} onChange={(e) => setPriority(e.target.value)}>
+                  {Object.entries(PRIORITY).map(([v, [l]]) => <option key={v} value={v}>{l}</option>)}
                 </select>
               </div>
             </div>
 
-            <div style={{ marginTop: 20, marginBottom: 20 }}>
-              <label className="form-label required">Daftar Item Material/Alat</label>
-              <div style={{ border: '1px solid var(--gray-200)', borderRadius: 'var(--radius-md)', overflow: 'hidden' }}>
-                <table className="table">
-                  <thead style={{ background: 'var(--gray-50)' }}>
+            <div className="form-group">
+              <span className="form-label required">Daftar material / alat</span>
+              <div className="table-wrapper" style={{ border: '1px solid var(--gray-200)', borderRadius: 'var(--radius-md)' }}>
+                <table>
+                  <thead>
                     <tr>
-                      <th>Deskripsi Barang</th>
-                      <th style={{ width: 120 }}>Satuan</th>
-                      <th style={{ width: 120 }}>Kuantitas</th>
-                      <th style={{ width: 50 }}></th>
+                      <th>Deskripsi barang</th>
+                      <th style={{ width: 150 }}>Satuan</th>
+                      <th style={{ width: 150 }}>Kuantitas</th>
+                      <th style={{ width: 60 }}><span className="sr-only">Hapus</span></th>
                     </tr>
                   </thead>
                   <tbody>
                     {items.map((item, index) => (
                       <tr key={index}>
-                        <td><input type="text" className="form-input" placeholder="Semen Portland 50kg" value={item.description} onChange={(e) => { const newItems = [...items]; newItems[index].description = e.target.value; setItems(newItems); }} /></td>
-                        <td><input type="text" className="form-input" placeholder="Sak" value={item.unit} onChange={(e) => { const newItems = [...items]; newItems[index].unit = e.target.value; setItems(newItems); }} /></td>
-                        <td><input type="number" className="form-input" placeholder="100" value={item.quantity} onChange={(e) => { const newItems = [...items]; newItems[index].quantity = e.target.value; setItems(newItems); }} /></td>
-                        <td>
+                        <td style={{ padding: '8px 10px', minWidth: 220 }}><input aria-label={`Deskripsi item ${index + 1}`} className="form-input" placeholder="Semen Portland 50 kg" value={item.description} onChange={(e) => updateItem(index, 'description', e.target.value)} /></td>
+                        <td style={{ padding: '8px 10px' }}><input aria-label={`Satuan item ${index + 1}`} className="form-input" placeholder="Sak" value={item.unit} onChange={(e) => updateItem(index, 'unit', e.target.value)} /></td>
+                        <td style={{ padding: '8px 10px' }}><input aria-label={`Kuantitas item ${index + 1}`} type="number" min="0" step="any" className="form-input" placeholder="100" value={item.quantity} onChange={(e) => updateItem(index, 'quantity', e.target.value)} /></td>
+                        <td style={{ padding: '8px 6px' }}>
                           {items.length > 1 && (
-                            <button className="btn btn-sm btn-outline" style={{ color: 'var(--red-600)', borderColor: 'var(--red-200)' }} onClick={() => setItems(items.filter((_, i) => i !== index))}>
-                              <XCircle size={16} />
+                            <button type="button" className="action-btn danger" aria-label={`Hapus item ${index + 1}`} onClick={() => setItems(items.filter((_, i) => i !== index))}>
+                              <Trash2 />
                             </button>
                           )}
                         </td>
@@ -186,25 +172,59 @@ export default function MaterialRequestClient({ requests, projects, user }) {
                   </tbody>
                 </table>
               </div>
-              <button className="btn btn-sm btn-outline" style={{ marginTop: 10 }} onClick={() => setItems([...items, { description: '', unit: '', quantity: '' }])}>
-                <Plus size={14} className="inline-block mr-2" /> Tambah Item
+              <button type="button" className="btn btn-sm btn-outline" style={{ marginTop: 10 }} onClick={() => setItems([...items, emptyItem()])}>
+                <Plus aria-hidden /> Tambah baris
               </button>
             </div>
 
             <div className="form-group">
-              <label className="form-label">Catatan / Keterangan</label>
-              <textarea className="form-input" rows="3" placeholder="Catatan tambahan untuk tim logistik..." value={notes} onChange={e => setNotes(e.target.value)}></textarea>
+              <label className="form-label" htmlFor="mr-notes">Catatan untuk tim logistik</label>
+              <textarea id="mr-notes" className="form-input" rows="3" value={notes} onChange={(e) => setNotes(e.target.value)} />
             </div>
 
-            <div style={{ display: 'flex', justifyContent: 'flex-end', gap: 10, marginTop: 24 }}>
-              <button className="btn btn-outline" onClick={() => setActiveTab('list')}>Batal</button>
-              <button className="btn btn-primary" onClick={handleSubmit} disabled={isSubmitting}>
-                {isSubmitting ? 'Mengajukan...' : 'Ajukan MR'}
-              </button>
+            <div className="form-actions">
+              <button type="button" className="btn btn-outline" onClick={() => setActiveTab('list')}>Batal</button>
+              <button type="submit" className="btn btn-primary" disabled={isSubmitting}>{isSubmitting ? 'Mengajukan…' : 'Ajukan material request'}</button>
             </div>
+          </form>
+        )}
+      </div>
+
+      {detail && (
+        <Modal
+          title={`Material request ${detail.mrNumber}`}
+          subtitle={`${detail.project.code} · diajukan ${detail.requester.name} · ${fmtDate(detail.createdAt)}`}
+          onClose={() => setDetail(null)}
+          footer={
+            <>
+              <button className="btn btn-outline" onClick={() => setDetail(null)}>Tutup</button>
+              {canCreate && detail.status === 'SUBMITTED' && (
+                <button className="btn btn-primary" disabled={approving === detail.id} onClick={() => approve(detail)}><Check aria-hidden /> Setujui</button>
+              )}
+            </>
+          }
+        >
+          <div className="form-stack">
+            <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}>
+              <StatusBadge value={detail.status} />
+              <StatusBadge value={detail.priority} labels={{ [detail.priority]: 'Prioritas ' + (PRIORITY[detail.priority]?.[0] ?? detail.priority).toLowerCase() }} tones={{ [detail.priority]: PRIORITY[detail.priority]?.[1] }} />
+            </div>
+            <div className="table-wrapper" style={{ border: '1px solid var(--gray-200)', borderRadius: 'var(--radius-md)' }}>
+              <table>
+                <thead>
+                  <tr><th>Barang</th><th className="num">Jumlah</th><th>Satuan</th></tr>
+                </thead>
+                <tbody>
+                  {detail.items.map((i, idx) => (
+                    <tr key={i.id ?? idx}><td>{i.description}</td><td className="num">{Number(i.quantity).toLocaleString('id-ID')}</td><td>{i.unit || '-'}</td></tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+            {detail.notes && <p className="muted" style={{ whiteSpace: 'pre-line' }}><strong>Catatan:</strong> {detail.notes}</p>}
           </div>
-        </div>
+        </Modal>
       )}
-    </>
+    </div>
   );
 }

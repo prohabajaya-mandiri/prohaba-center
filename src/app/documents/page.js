@@ -7,6 +7,8 @@ import AppLayout from '@/components/AppLayout';
 import { prisma } from '@/lib/prisma';
 import DocumentsClient from './DocumentsClient';
 
+export const metadata = { title: 'Dokumen Engineering' };
+
 export default async function DocumentsPage({searchParams}) {
   const session = await auth();
   if (!session?.user) redirect('/login');

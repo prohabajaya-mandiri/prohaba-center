@@ -7,6 +7,8 @@ import AppLayout from '@/components/AppLayout';
 import { prisma } from '@/lib/prisma';
 import WorkshopClient from './WorkshopClient';
 
+export const metadata = { title: 'Workshop & Fabrikasi' };
+
 export default async function WorkshopPage({searchParams}) {
   const session = await auth();
   if (!session?.user) redirect('/login');

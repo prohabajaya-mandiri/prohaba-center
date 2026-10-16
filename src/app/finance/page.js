@@ -11,6 +11,8 @@ import AppLayout from "@/components/AppLayout";
 import ListPager from "@/components/ListPager";
 import { pageQuery } from "@/lib/page-query";
 import FinanceClient from "./FinanceClient";
+
+export const metadata = { title: 'Keuangan & Hutang' };
 export default async function FinancePage({ searchParams }) {
   const session = await auth();
   if (!session?.user) redirect("/login");

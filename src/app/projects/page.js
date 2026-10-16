@@ -8,7 +8,7 @@ import { prisma } from '@/lib/prisma';
 import ProjectsClient from './ProjectsClient';
 
 export const metadata = {
-  title: 'Manajemen Proyek — ERP Prohaba Jaya Mandiri',
+  title: 'Proyek',
 };
 
 export default async function ProjectsPage({searchParams}) {
@@ -18,9 +18,11 @@ export default async function ProjectsPage({searchParams}) {
   if (!session) redirect('/login');
 
   const paging=await pageQuery(searchParams);
-  const total=await prisma.project.count();
+  // Proyek yang diarsipkan tidak ditampilkan lagi di daftar kerja.
+  const where = { status: { not: 'ARCHIVED' } };
+  const total=await prisma.project.count({ where });
   const projects = await prisma.project.findMany({
-    skip:paging.skip, take:paging.take,
+    where, skip:paging.skip, take:paging.take,
     orderBy: { createdAt: 'desc' }
   });
 

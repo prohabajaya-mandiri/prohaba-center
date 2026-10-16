@@ -7,6 +7,8 @@ import { prisma } from '@/lib/prisma';
 import AppLayout from '@/components/AppLayout';
 import ProcurementClient from './ProcurementClient';
 
+export const metadata = { title: 'Procurement & PO' };
+
 export default async function ProcurementPage({searchParams}) {
   const session = await auth();
   if (!session?.user) redirect('/login');
