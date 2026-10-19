@@ -53,7 +53,7 @@ export const MODULE_TABS = {
   '/master-data': {
     param: 'resource',
     items: [
-      ['employees', 'Pegawai', MASTER_ROLES.employees],
+      ['employees', 'Karyawan', MASTER_ROLES.employees],
       ['assignments', 'Penugasan & tarif', MASTER_ROLES.assignments],
       ['vendors', 'Pemasok', MASTER_ROLES.vendors],
       ['prices', 'Referensi harga', MASTER_ROLES.prices],

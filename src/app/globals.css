@@ -1433,3 +1433,30 @@ th { letter-spacing: 0.04em; }
 @media (prefers-reduced-motion: reduce) {
   *, *::before, *::after { animation-duration: 1ms !important; transition-duration: 1ms !important; }
 }
+
+/* ==========================================================================
+   Master Data Karyawan — komponen yang sama dengan E-HSE (detail, tab, tabel-kartu)
+   ========================================================================== */
+.detail-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(210px, 1fr)); gap: 16px 24px; }
+.detail-grid dt { font-size: 12.5px; color: var(--gray-500); font-weight: 500; }
+.detail-grid dd { margin: 2px 0 0; font-size: 15px; color: var(--gray-900); font-weight: 500; word-break: break-word; }
+
+.tabs-bar { display: flex; gap: 4px; border-bottom: 1px solid var(--gray-200); margin-bottom: 20px; overflow-x: auto; scrollbar-width: none; }
+.tabs-bar::-webkit-scrollbar { display: none; }
+.tabs-bar a, .tabs-bar button { display: inline-flex; align-items: center; min-height: 46px; padding: 10px 16px; margin-bottom: -1px; font-size: 14.5px; font-weight: 500; color: var(--gray-500); border: none; background: none; border-bottom: 2px solid transparent; white-space: nowrap; text-decoration: none; cursor: pointer; }
+.tabs-bar a:hover, .tabs-bar button:hover { color: var(--gray-900); text-decoration: none; }
+.tabs-bar a.active, .tabs-bar button.active { color: var(--brand-700); border-bottom-color: var(--brand-600); font-weight: 600; }
+
+.clickable { cursor: pointer; }
+.clickable:hover td { background: var(--brand-50); }
+
+@media (max-width: 640px) {
+  .table-cards table { min-width: 0; }
+  .table-cards thead { display: none; }
+  .table-cards tr { display: block; padding: 12px 14px; border-bottom: 1px solid var(--gray-200); }
+  .table-cards td { display: flex; justify-content: space-between; gap: 12px; padding: 5px 0; border: none; text-align: right; }
+  .table-cards td::before { content: attr(data-label); font-size: 12.5px; font-weight: 500; color: var(--gray-500); text-align: left; flex-shrink: 0; }
+  .table-cards td.cell-empty { display: block !important; text-align: center; }
+  .table-cards td.cell-empty::before { content: none; }
+  .toolbar .form-group { min-width: calc(50% - 6px); flex: 1; }
+}

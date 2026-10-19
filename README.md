@@ -61,8 +61,12 @@ Backup terenkripsi AES-256-GCM disimpan di .vercel/backups. Kunci lokal berada d
 
 Restore drill memakai schema sementara, memeriksa jumlah dan isi baris, kemudian menghapus schema sementara. Struktur sumber harus sesuai versi saat backup dibuat. Pemulihan bencana harus menyiapkan struktur dari versi migrasi backup terlebih dahulu; jangan langsung menimpa database aktif. Backup lokal belum merupakan jadwal backup otomatis di luar mesin ini.
 
+## Master Data Karyawan (terintegrasi E-HSE)
+
+Data karyawan disatukan dengan Database Personel E-HSE: E-HSE adalah sumber data, ERP memakai form yang sama dan menyimpan salinan lokal untuk penugasan, absensi dan payroll. Perlu `HSE_API_URL` dan `HSE_INTEGRATION_SECRET` (sama dengan `INTEGRATION_CENTER_SECRET` di E-HSE). Untuk development jalankan E-HSE di port 3001. Rincian, keamanan dan cara menautkan pegawai lama: docs/integrasi-master-karyawan.md.
+
 ## Penggunaan setelah perbaikan
 
-Finance menyiapkan mapping akun dan saldo awal melalui Master Data. HRD mengisi pegawai, penugasan dan tarif proyek sebelum payroll. Persetujuan dan pembayaran terpisah. Semua proyek terlihat sesuai izin modul; tidak ada isolasi anggota proyek.
+Finance menyiapkan mapping akun dan saldo awal melalui Master Data. HRD mengisi karyawan (Master Data → Karyawan, bersumber dari E-HSE), penugasan dan tarif proyek sebelum payroll. Persetujuan dan pembayaran terpisah. Semua proyek terlihat sesuai izin modul; tidak ada isolasi anggota proyek.
 
 Rincian perubahan, bukti pengujian, batas kapasitas, dan kebijakan pencatatan ada di docs/remediation-2026-10-15.md. Payroll belum menghitung BPJS/PPh/potongan otomatis. Log BBM/perawatan baru masuk buku besar setelah dibuat faktur pembelian yang sesuai. Pembayaran pada aplikasi adalah pencatatan, bukan transfer bank.

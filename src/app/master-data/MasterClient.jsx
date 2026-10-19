@@ -35,21 +35,8 @@ const PURPOSES = [
   "EXPENSE",
 ];
 const FIELDS = {
-  employees: [
-    ["employeeNo", "Nomor pegawai"],
-    ["name", "Nama"],
-    ["nik", "NIK"],
-    ["position", "Jabatan"],
-    ["department", "Departemen"],
-    ["employeeType", "Tipe", ["STAFF", "HARIAN", "BORONGAN"]],
-    ["baseSalary", "Gaji dasar (informasi)", "number"],
-    ["joinDate", "Mulai bekerja", "date"],
-    ["bankAccount", "Rekening", "optional"],
-    ["bankName", "Bank", "optional"],
-    ["npwp", "NPWP", "optional"],
-  ],
   assignments: [
-    ["employeeId", "Pegawai", "employees"],
+    ["employeeId", "Karyawan", "employees"],
     ["projectId", "Proyek", "projects"],
     ["role", "Posisi di proyek"],
     ["startDate", "Mulai penugasan", "date"],
@@ -82,10 +69,9 @@ const FIELDS = {
     ["balance", "Saldo awal", "number"],
   ],
 };
-for (const resource of ["employees", "vendors", "accounts"])
+for (const resource of ["vendors", "accounts"])
   FIELDS[resource].push(["isActive", "Status", ["true", "false"]]);
 const LABELS = {
-  employees: "Pegawai",
   assignments: "Penugasan & tarif",
   vendors: "Pemasok",
   prices: "Referensi harga",
@@ -284,7 +270,7 @@ export default function MasterClient({
                   type === "projects"
                     ? projects.map((i) => [i.id, i.code + " — " + i.name])
                     : type === "employees"
-                      ? employees.map((i) => [i.id, i.name])
+                      ? employees.map((i) => [i.id, i.name + " · " + i.employeeNo])
                       : Array.isArray(type)
                         ? type.map((i) => [i, i === "" ? "Tanpa mapping" : humanize(i)])
                         : null;

@@ -13,8 +13,8 @@ import { STANDARD_ACCOUNTS } from "./ledger.js";
 import { MASTER_ROLES } from "../module-tabs.js";
 // Satu sumber aturan dengan sub-menu Master Data di sidebar.
 export const masterRoles = MASTER_ROLES;
+// Karyawan tidak dikelola di sini: lihat lib/services/employees.js (sumber data E-HSE).
 const models = {
-  employees: "employee",
   assignments: "employeeProject",
   vendors: "vendor",
   prices: "priceReference",
@@ -22,7 +22,8 @@ const models = {
 };
 export function masterAllowed(resource, user) {
   ensure(
-    Object.hasOwn(masterRoles, resource) &&
+    Object.hasOwn(models, resource) &&
+      Object.hasOwn(masterRoles, resource) &&
       masterRoles[resource].includes(user.role),
     "Master data tidak diizinkan.",
     403,
@@ -53,43 +54,6 @@ export async function listMaster(
 export async function saveMaster(resource, body, user, id) {
   masterAllowed(resource, user);
   let data;
-  if (resource === "employees") {
-    object(body, [
-      "employeeNo",
-      "name",
-      "nik",
-      "position",
-      "department",
-      "employeeType",
-      "baseSalary",
-      "joinDate",
-      "isActive",
-      "bankAccount",
-      "bankName",
-      "npwp",
-      "bpjsKesehatan",
-      "bpjsKetenagakerjaan",
-    ]);
-    data = {
-      employeeNo: text(body.employeeNo, "Nomor pegawai"),
-      name: text(body.name, "Nama"),
-      nik: text(body.nik, "NIK", 30),
-      position: text(body.position, "Posisi"),
-      department: text(body.department, "Departemen"),
-      employeeType: choice(body.employeeType, ["STAFF", "HARIAN", "BORONGAN"]),
-      baseSalary: money(body.baseSalary ?? 0),
-      joinDate: date(body.joinDate),
-      isActive: body.isActive ?? true,
-    };
-    for (const key of [
-      "bankAccount",
-      "bankName",
-      "npwp",
-      "bpjsKesehatan",
-      "bpjsKetenagakerjaan",
-    ])
-      if (body[key] !== undefined) data[key] = text(body[key], key, 100, true);
-  }
   if (resource === "assignments") {
     object(body, [
       "employeeId",
@@ -202,6 +166,11 @@ export async function saveMaster(resource, body, user, id) {
   return transaction(async (tx) => {
     const model = models[resource],
       old = id ? await tx[model].findUniqueOrThrow({ where: { id } }) : null;
+    if (resource === "assignments") {
+      const employee = await tx.employee.findUnique({ where: { id: data.employeeId }, select: { personnelId: true, isActive: true } });
+      ensure(employee?.isActive, "Pegawai tidak ditemukan atau tidak aktif.");
+      ensure(employee.personnelId, "Pegawai belum tertaut ke Master Data Karyawan (E-HSE). Tautkan dahulu.");
+    }
     if (
       resource === "accounts" &&
       old &&
