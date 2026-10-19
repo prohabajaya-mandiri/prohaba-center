@@ -152,15 +152,17 @@ try {
   const bank = await prisma.gLAccount.findUniqueOrThrow({
     where: { purpose: "CASH_BANK" },
   });
-  const employee = await json(hr, "/api/master/employees", {
-    employeeNo: tag,
-    name: tag,
-    nik: tag.slice(0, 16),
-    position: "Teknisi",
-    department: "Proyek",
-    employeeType: "HARIAN",
-    baseSalary: 0,
-    joinDate: "2026-01-01",
+  // Karyawan bersumber dari E-HSE; fixture memakai salinan lokal tertaut (personnelId fiktif) tanpa memanggil E-HSE.
+  const employee = await prisma.employee.create({
+    data: {
+      employeeNo: tag,
+      personnelId: "fixture-" + tag,
+      name: tag,
+      position: "Teknisi",
+      category: "MANPOWER",
+      workStatus: "ACTIVE",
+      joinDate: new Date("2026-01-01Z"),
+    },
   });
   employees.push(employee.id);
   await mark(

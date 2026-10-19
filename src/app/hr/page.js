@@ -7,6 +7,7 @@ import ListPager from "@/components/ListPager";
 import { pageQuery } from "@/lib/page-query";
 import HRClient from "./HRClient";
 import { date } from "@/lib/validation";
+import { ensureFreshEmployees } from "@/lib/services/employees";
 
 export const metadata = { title: 'Karyawan & Absensi' };
 export default async function HRPage({ searchParams }) {
@@ -19,6 +20,8 @@ export default async function HRPage({ searchParams }) {
   try {
     if (query?.date) filterDate = date(query.date).toISOString().slice(0, 10);
   } catch {}
+  // Status aktif karyawan mengikuti Master Data Karyawan (E-HSE).
+  await ensureFreshEmployees();
   const where = filterDate ? { date: new Date(filterDate + "T00:00:00Z") } : {};
   const [employees, rows, total, projects] = await Promise.all([
     prisma.employee.findMany({
