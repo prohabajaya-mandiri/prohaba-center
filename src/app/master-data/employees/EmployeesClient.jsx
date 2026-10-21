@@ -60,7 +60,7 @@ export default function EmployeesClient({ sites, rows, total, page, canEdit, can
             <button className="btn btn-outline btn-sm" disabled={busy || Boolean(offline)} onClick={() => runSync('link')}><Link2 size={15} /> Tautkan otomatis berdasarkan NIK</button>
           </div>
           <DataTable rows={legacy} columns={[
-            { key: 'name', label: 'Nama', render: (e) => (<div><strong>{e.name}</strong><div className="muted">{e.employeeNo}</div></div>) },
+            { key: 'name', label: 'Nama', render: (e) => (<strong>{e.name}</strong>) },
             { key: 'position', label: 'Jabatan' },
             { key: 'nik', label: 'NIK', render: (e) => (e.nik ? '************' + e.nik.slice(-4) : '-') },
             { key: 'act', label: '', render: (e) => <button className="btn btn-primary btn-sm" disabled={Boolean(offline)} onClick={() => register(e)}>Daftarkan</button> },
@@ -69,11 +69,12 @@ export default function EmployeesClient({ sites, rows, total, page, canEdit, can
       )}
 
       <FilterBar keep={['resource']} filters={[
-        { type: 'search', label: 'Cari', placeholder: 'Nama, kode, jabatan, NIK' },
+        { type: 'search', label: 'Cari', placeholder: 'Nama, NIP, jabatan, NIK' },
         { name: 'siteId', label: 'Site', type: 'select', options: sites.map((s) => [s.id, s.code]) },
         { name: 'category', label: 'Kategori', type: 'select', options: CATEGORIES },
         { name: 'workStatus', label: 'Status kerja', type: 'select', options: WORK_STATUSES },
         { name: 'employmentType', label: 'Kepegawaian', type: 'select', options: [...EMPLOYMENT_TYPES, ['NONE', 'Belum diisi']] },
+        { name: 'nip', label: 'NIP', type: 'select', options: [['NONE', 'Belum diisi'], ['SET', 'Sudah diisi']] },
         { name: 'former', label: 'Data', type: 'select', allLabel: 'Karyawan aktif', options: [['1', 'Mantan karyawan'], ['all', 'Semua']] },
       ]}>
         {canEdit && <button className="btn btn-outline" disabled={busy || Boolean(offline)} onClick={() => runSync('sync')} title={sync.at ? 'Salinan ERP terakhir diperbarui ' + new Date(sync.at).toLocaleString('id-ID') : undefined}><RefreshCw size={16} /> Sinkronkan</button>}
@@ -88,7 +89,7 @@ export default function EmployeesClient({ sites, rows, total, page, canEdit, can
           empty="Belum ada karyawan sesuai filter."
           onRowClick={offline ? undefined : (p) => router.push('/master-data/employees/' + p.id)}
           columns={[
-            { key: 'name', label: 'Nama', render: (p) => (<div><strong>{p.name}</strong><div className="muted">{p.code} · NIK {p.nik}</div></div>) },
+            { key: 'name', label: 'Nama', render: (p) => (<div><strong>{p.name}</strong><div className="muted">{p.nip ? `NIP ${p.nip}` : 'NIP belum diisi'} · NIK {p.nik}</div></div>) },
             { key: 'category', label: 'Kategori', render: (p) => labelOf(p.category) },
             { key: 'position', label: 'Jabatan', render: (p) => (<div>{p.position}{p.foreman && <div className="muted">Mandor: {p.foreman.name}</div>}</div>) },
             { key: 'siteName', label: 'Site' },

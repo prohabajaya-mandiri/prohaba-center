@@ -20,7 +20,7 @@ export default async function EmployeeDetailPage({ params }) {
   }
   const erp = await erpAssignments(person.id);
   return (
-    <AppLayout user={session.user} title={person.name} subtitle={`${person.code} · ${person.position} · ${person.currentSite?.code ?? "-"}`}>
+    <AppLayout user={session.user} title={person.name} subtitle={`${person.nip ? `NIP ${person.nip} · ` : ''}${person.position} · ${person.currentSite?.code ?? "-"}`}>
       <EmployeeDetail person={person} erp={erp} hseUrl={hsePublicUrl()} canEdit={canEditEmployees(session.user)} canEmployment={canSetEmployment(session.user)} />
     </AppLayout>
   );

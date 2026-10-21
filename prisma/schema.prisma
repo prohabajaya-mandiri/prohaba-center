@@ -458,7 +458,8 @@ model SalesInvoice {
 model Employee {
   id                  String    @id @default(cuid())
   userId              String?   @unique
-  employeeNo          String    @unique // kode personel E-HSE (PJM-000123); data lama: EMP-001
+  employeeNo          String    @unique // kode internal E-HSE (PJM-000123); data lama: EMP-001. Tidak ditampilkan ke pengguna
+  nip                 String? // NIP dari E-HSE (diisi HRD); kosong sampai dilengkapi
   personnelId         String?   @unique // Personnel.id di E-HSE; null = data lama belum tertaut
   name                String
   nikLast4            String?

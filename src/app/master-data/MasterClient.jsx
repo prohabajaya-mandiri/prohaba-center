@@ -270,7 +270,7 @@ export default function MasterClient({
                   type === "projects"
                     ? projects.map((i) => [i.id, i.code + " — " + i.name])
                     : type === "employees"
-                      ? employees.map((i) => [i.id, i.name + " · " + i.employeeNo])
+                      ? employees.map((i) => [i.id, i.name + (i.nip ? " · NIP " + i.nip : "")])
                       : Array.isArray(type)
                         ? type.map((i) => [i, i === "" ? "Tanpa mapping" : humanize(i)])
                         : null;
