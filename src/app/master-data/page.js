@@ -45,7 +45,7 @@ export default async function MasterPage({ searchParams }) {
     resource === "assignments"
       ? await prisma.employee.findMany({
           where: { isActive: true, personnelId: { not: null } },
-          select: { id: true, name: true, employeeNo: true },
+          select: { id: true, name: true, nip: true },
           orderBy: { name: "asc" },
           take: 2000,
         })

@@ -1,6 +1,6 @@
 import { InputError } from "@/lib/validation";
 
-const LIST_PARAMS = ["q", "siteId", "category", "workStatus", "employmentType", "former", "page", "picker"];
+const LIST_PARAMS = ["q", "siteId", "category", "workStatus", "employmentType", "nip", "former", "page", "picker"];
 
 /** Hanya parameter filter yang dikenal yang diteruskan ke E-HSE. */
 export function listQuery(searchParams) {

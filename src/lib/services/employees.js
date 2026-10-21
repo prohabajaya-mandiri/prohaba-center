@@ -32,6 +32,8 @@ export function mirrorData(p, now = new Date()) {
   return {
     personnelId: p.id,
     employeeNo: p.code,
+    // Umpan E-HSE versi lama tidak membawa nip: jangan kosongkan NIP yang sudah tersalin.
+    ...(p.nip !== undefined && { nip: p.nip }),
     name: p.name,
     nikLast4: p.nikLast4 ?? null,
     category: p.category ?? null,
@@ -140,7 +142,7 @@ async function linkLegacy(tx, legacyId, p) {
   });
   if (twin) {
     const used = twin._count.projects + twin._count.attendances + twin._count.payrollItems;
-    ensure(!used, `Profil ${p.code} sudah memiliki penugasan/absensi di ERP; satukan manual dengan data lama ${legacy.employeeNo}.`, 409);
+    ensure(!used, `Profil ${p.name} sudah memiliki penugasan/absensi di ERP; satukan manual dengan data pegawai lama ${legacy.name}.`, 409);
     await tx.employee.delete({ where: { id: twin.id } });
   }
   return tx.employee.update({ where: { id: legacyId }, data: { ...mirrorData(p), ...CLEAR_LEGACY } });
@@ -188,9 +190,11 @@ export async function mirrorList(f = {}, { skip = 0, take = 50 } = {}) {
   const where = { personnelId: { not: null }, isActive: f.former === "1" ? false : f.former === "all" ? undefined : true };
   if (f.category) where.category = f.category;
   if (f.workStatus) where.workStatus = f.workStatus;
+  if (f.nip === "NONE") where.nip = null;
+  else if (f.nip === "SET") where.nip = { not: null };
   if (f.q) {
     const q = String(f.q).slice(0, 80).trim();
-    where.OR = [{ name: { contains: q, mode: "insensitive" } }, { employeeNo: { contains: q, mode: "insensitive" } }, { position: { contains: q, mode: "insensitive" } }];
+    where.OR = [{ name: { contains: q, mode: "insensitive" } }, { nip: { contains: q, mode: "insensitive" } }, { position: { contains: q, mode: "insensitive" } }];
   }
   const [rows, total] = await Promise.all([
     prisma.employee.findMany({ where, skip, take, orderBy: { name: "asc" } }),
@@ -199,7 +203,7 @@ export async function mirrorList(f = {}, { skip = 0, take = 50 } = {}) {
   return {
     total,
     rows: rows.map((e) => ({
-      id: e.personnelId, code: e.employeeNo, name: e.name, nik: e.nikLast4 ? "************" + e.nikLast4 : "-", category: e.category,
+      id: e.personnelId, nip: e.nip, name: e.name, nik: e.nikLast4 ? "************" + e.nikLast4 : "-", category: e.category,
       position: e.position, siteName: e.siteCode ?? "-", employmentType: e.employmentType, contractEndDate: e.contractEndDate,
       workStatus: e.workStatus, tenure: null, fitness: null, permitEnd: null,
     })),

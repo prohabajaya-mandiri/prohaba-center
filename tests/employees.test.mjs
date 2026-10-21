@@ -30,6 +30,10 @@ test("salinan lokal karyawan tidak memuat data sensitif dan mengikuti status E-H
   assert.equal(row.isActive, false);
   assert.equal(row.hseUpdatedAt.toISOString(), "2026-10-19T01:02:03.004Z");
   assert.ok(!Object.keys(row).some((k) => /nik$|Enc$|bankAccount|npwp|medical/i.test(k)));
+  // NIP disalin bila ada di umpan (termasuk null = dihapus); umpan versi lama tanpa nip tidak menyentuhnya.
+  assert.ok(!("nip" in row));
+  assert.equal(mirrorData({ id: "p1", nip: "2019120212" }).nip, "2019120212");
+  assert.equal(mirrorData({ id: "p1", nip: null }).nip, null);
   assert.equal(canEditEmployees({ role: "HRD" }), true);
   assert.equal(canEditEmployees({ role: "TOP_MANAGEMENT" }), false);
   assert.throws(() => requireEmployees({ role: "FINANCE" }), /tidak diizinkan/);
