@@ -7,6 +7,7 @@ import { fileURLToPath } from "node:url";
 export const SHARED = [
   ["src/lib/integration-signature.js", "src/lib/integration-signature.js"],
   ["src/lib/domain/personnel.js", "src/lib/hse/personnel.js"],
+  ["src/lib/domain/ktp-ocr.js", "src/lib/hse/ktp-ocr.js"],
   ["src/lib/domain/permit.js", "src/lib/hse/permit.js"],
   ["src/lib/labels.js", "src/lib/hse/labels.js"],
   ["src/lib/dates.js", "src/lib/hse/dates.js"],
@@ -26,7 +27,7 @@ if (resolve(fileURLToPath(import.meta.url)) === resolve(process.argv[1] ?? "")) 
   let drift = 0;
   for (const [from, to] of SHARED) {
     const source = readFileSync(hse + "/" + from, "utf8");
-    const copy = readFileSync(to, "utf8");
+    const copy = existsSync(to) ? readFileSync(to, "utf8") : "";
     if (normalize(source) === normalize(copy)) continue;
     drift++;
     if (write) {
