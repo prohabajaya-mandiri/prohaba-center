@@ -32,7 +32,8 @@ export function mirrorData(p, now = new Date()) {
   return {
     personnelId: p.id,
     employeeNo: p.code,
-    nip: p.nip ?? null,
+    // Umpan E-HSE versi lama tidak membawa nip: jangan kosongkan NIP yang sudah tersalin.
+    ...(p.nip !== undefined && { nip: p.nip }),
     name: p.name,
     nikLast4: p.nikLast4 ?? null,
     category: p.category ?? null,
