@@ -542,16 +542,18 @@ model Attendance {
   @@index([date])
 }
 
-// Log setiap scan kartu QR di kiosk absensi. Scan pertama dalam sehari membuat
+// Log setiap scan kartu QR oleh PIC absensi lapangan. Scan pertama dalam sehari membuat
 // Attendance HADIR (dasar payroll); scan berikutnya hanya menambah log jam.
 model AttendanceScan {
   id           String   @id @default(cuid())
+  clientId     String   @unique // id dari HP PIC; membuat pengiriman ulang antrean offline aman
   attendanceId String
   employeeId   String
-  projectId    String
-  date         DateTime // tanggal lokal kiosk, 00:00 UTC (sama dengan Attendance.date)
-  scannedAt    DateTime @default(now()) // jam server
-  timeZone     String // zona waktu kiosk: Asia/Jakarta | Asia/Makassar | Asia/Jayapura
+  projectId    String // otomatis dari penugasan karyawan pada tanggal scan
+  date         DateTime // tanggal lokal scan, 00:00 UTC (sama dengan Attendance.date)
+  scannedAt    DateTime // jam scan di HP, dikoreksi selisih jam HP terhadap server
+  receivedAt   DateTime @default(now()) // jam server saat scan diterima (selisih besar = scan offline)
+  timeZone     String // zona waktu lokasi: Asia/Jakarta | Asia/Makassar | Asia/Jayapura
   method       String // SCANNER | KAMERA
   scannedBy    String
 
