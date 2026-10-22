@@ -1,6 +1,10 @@
-export const ROLES = ['TOP_MANAGEMENT', 'HRD', 'PJO', 'LOGISTIK', 'FINANCE', 'ENGINEERING', 'WORKSHOP'];
+const STAFF_ROLES = ['TOP_MANAGEMENT', 'HRD', 'PJO', 'LOGISTIK', 'FINANCE', 'ENGINEERING', 'WORKSHOP'];
+// Akun perangkat kiosk absensi: hanya bisa membuka halaman scan /absen.
+export const KIOSK_ROLE = 'ABSENSI';
+export const ROLES = [...STAFF_ROLES, KIOSK_ROLE];
 const moduleRoles = {
-  dashboard: ROLES, projects: ROLES,
+  dashboard: STAFF_ROLES, projects: STAFF_ROLES,
+  absen: ['TOP_MANAGEMENT', 'HRD', 'PJO', KIOSK_ROLE],
   master: ['TOP_MANAGEMENT','HRD','LOGISTIK','FINANCE'],
   'master-data': ['TOP_MANAGEMENT','HRD','LOGISTIK','FINANCE'],
   scurve: ['TOP_MANAGEMENT', 'PJO', 'FINANCE', 'ENGINEERING'],
@@ -15,6 +19,10 @@ const moduleRoles = {
   hr: ['TOP_MANAGEMENT', 'HRD', 'PJO'], payroll: ['TOP_MANAGEMENT', 'HRD', 'FINANCE'],
   users: ['TOP_MANAGEMENT'], 'audit-log': ['TOP_MANAGEMENT'],
 };
+/** Halaman awal setelah login. */
+export function homePath(role) {
+  return role === KIOSK_ROLE ? '/absen' : '/dashboard';
+}
 export function canAccess(role, pathname, method = 'GET') {
   const parts = pathname.split('/').filter(Boolean);
   const moduleName = parts[0] === 'api' ? parts[1] : parts[0];

@@ -1250,6 +1250,75 @@ details.card[open] > summary::after { transform: rotate(-135deg) translateY(-3px
 .print-doc-signs > div { flex: 1; }
 .print-doc-signs .line { height: 64px; border-bottom: 1px solid #555; margin: 0 16px 6px; }
 
+/* ─── Kiosk absensi (/absen) ─────────────────────────────────────────── */
+.kiosk { min-height: 100vh; min-height: 100dvh; background: var(--gray-50); display: flex; flex-direction: column; }
+.kiosk-setup { align-items: center; justify-content: center; padding: 16px; }
+.kiosk-setup-card { width: 100%; max-width: 460px; }
+.kiosk-setup-title { font-size: 22px; margin-bottom: 4px; }
+.kiosk-user { text-align: center; }
+.link-button { background: none; border: 0; padding: 0; color: var(--brand-600); font: inherit; cursor: pointer; text-decoration: underline; }
+.kiosk-header { display: flex; align-items: center; justify-content: space-between; gap: 16px; padding: 12px 24px; background: var(--white); border-bottom: 1px solid var(--gray-200); flex-wrap: wrap; }
+.kiosk-brand { display: flex; align-items: center; gap: 12px; min-width: 0; }
+.kiosk-brand strong { display: block; font-size: 17px; color: var(--gray-900); }
+.kiosk-brand span { font-size: 13px; color: var(--gray-500); }
+.kiosk-clock { text-align: center; }
+.kiosk-clock strong { display: block; font-size: 32px; font-variant-numeric: tabular-nums; color: var(--gray-900); line-height: 1.1; }
+.kiosk-clock span { font-size: 13.5px; color: var(--gray-500); }
+.kiosk-actions { display: flex; gap: 4px; }
+.kiosk-body { flex: 1; display: grid; grid-template-columns: minmax(0, 1fr) 340px; gap: 20px; padding: 20px 24px; align-items: start; }
+.kiosk-main { display: grid; gap: 16px; }
+.kiosk-result { display: flex; align-items: center; gap: 20px; min-height: 180px; padding: 24px 28px; border-radius: var(--radius-xl); border: 2px solid var(--gray-200); background: var(--white); }
+.kiosk-result > svg { width: 64px; height: 64px; flex: none; }
+.kiosk-result > div { display: grid; gap: 4px; min-width: 0; }
+.kiosk-result strong { font-size: 30px; line-height: 1.2; color: var(--gray-900); overflow-wrap: anywhere; }
+.kiosk-result span { font-size: 17px; color: var(--gray-600); }
+.kiosk-result .kiosk-result-time { font-weight: 600; }
+.kiosk-result.idle > svg { color: var(--gray-400); }
+.kiosk-result.idle strong { font-size: 24px; }
+.kiosk-result.ok { border-color: var(--green-500); background: var(--green-50); }
+.kiosk-result.ok > svg, .kiosk-result.ok .kiosk-result-time { color: var(--green-700); }
+.kiosk-result.duplicate { border-color: var(--blue-500); background: var(--blue-50); }
+.kiosk-result.duplicate > svg, .kiosk-result.duplicate .kiosk-result-time { color: var(--blue-700); }
+.kiosk-result.error { border-color: var(--red-500); background: var(--red-50); }
+.kiosk-result.error > svg { color: var(--red-600); }
+.kiosk-result.error span { color: var(--red-700); }
+.kiosk-input { display: grid; grid-template-columns: minmax(0, 1fr) auto; gap: 8px 12px; align-items: center; }
+.kiosk-input .form-label { grid-column: 1 / -1; margin: 0; }
+.kiosk-input .form-input { font-size: 17px; min-height: 46px; }
+.kiosk-camera { position: relative; border-radius: var(--radius-lg); overflow: hidden; background: #000; max-width: 560px; }
+.kiosk-camera video { display: block; width: 100%; height: auto; }
+.kiosk-camera .alert { margin: 0; border-radius: 0; }
+.kiosk-camera-hint { position: absolute; left: 0; right: 0; bottom: 0; padding: 8px; text-align: center; font-size: 13.5px; color: #fff; background: rgba(0, 0, 0, 0.55); }
+.kiosk-recent ul { list-style: none; margin: 0; padding: 0 16px 12px; max-height: calc(100dvh - 200px); overflow-y: auto; }
+.kiosk-recent li { display: grid; grid-template-columns: 52px minmax(0, 1fr); column-gap: 10px; padding: 8px 0; border-bottom: 1px solid var(--gray-100); font-size: 14px; }
+.kiosk-recent li:last-child { border-bottom: 0; }
+.kiosk-recent li.muted { display: block; }
+.kiosk-recent-time { grid-row: span 2; font-weight: 600; font-variant-numeric: tabular-nums; color: var(--gray-900); }
+.kiosk-recent-name { font-weight: 500; color: var(--gray-900); overflow-wrap: anywhere; }
+@media (max-width: 860px) {
+  .kiosk-header { padding: 10px 16px; }
+  .kiosk-clock { order: 3; width: 100%; }
+  .kiosk-clock strong { font-size: 26px; }
+  .kiosk-body { grid-template-columns: 1fr; padding: 16px; }
+  .kiosk-result { min-height: 140px; padding: 18px; gap: 14px; }
+  .kiosk-result > svg { width: 44px; height: 44px; }
+  .kiosk-result strong { font-size: 22px; }
+  .kiosk-result span { font-size: 15px; }
+  .kiosk-input { grid-template-columns: 1fr; }
+}
+
+/* ─── Kartu QR absensi (ukuran kartu ID 85,6 × 54 mm) ─────────────────── */
+.qr-sheet { display: flex; flex-wrap: wrap; gap: 4mm; }
+.qr-card { width: 85.6mm; height: 54mm; box-sizing: border-box; display: flex; align-items: center; gap: 4mm; padding: 4mm; border: 1px solid var(--gray-300); border-radius: 3mm; background: #fff; color: #111; break-inside: avoid; page-break-inside: avoid; }
+.qr-card-info { flex: 1; min-width: 0; display: flex; flex-direction: column; gap: 1.2mm; }
+.qr-card-brand { display: flex; align-items: center; gap: 2mm; margin-bottom: 2mm; font-size: 7.5pt; line-height: 1.25; color: #444; }
+.qr-card-brand img { height: 8mm; width: auto; }
+.qr-card-name { font-size: 11pt; line-height: 1.2; overflow-wrap: anywhere; }
+.qr-card-no { font-size: 10pt; font-weight: 600; letter-spacing: 0.04em; font-variant-numeric: tabular-nums; }
+.qr-card-meta { font-size: 7.5pt; color: #444; overflow-wrap: anywhere; }
+.qr-card-code { width: 36mm; height: 36mm; flex: none; }
+.qr-card-code svg { display: block; width: 100%; height: 100%; }
+
 @media print {
   @page { margin: 14mm; }
   body { background: #fff !important; }
@@ -1258,6 +1327,7 @@ details.card[open] > summary::after { transform: rotate(-135deg) translateY(-3px
   .card { box-shadow: none !important; break-inside: avoid; }
   body.printing-doc .app-layout { display: none !important; }
   body.printing-doc .print-doc { display: block !important; }
+  .qr-card { border-color: #999; }
 }
 
 /* ─── Tipografi (SF Pro di Apple, Inter di perangkat lain) ─────────────── */

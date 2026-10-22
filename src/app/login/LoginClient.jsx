@@ -29,7 +29,7 @@ export default function LoginClient() {
       setError('Email atau kata sandi salah.')
       setLoading(false)
     } else {
-      router.push('/dashboard')
+      router.push('/') // proxy mengarahkan ke halaman awal sesuai peran
       router.refresh() // Refresh to update server components with session
     }
   }
