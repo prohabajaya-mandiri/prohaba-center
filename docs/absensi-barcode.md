@@ -8,7 +8,7 @@ jadi langsung terpakai di rekap SDM dan payroll.
 
 | Langkah | Penjelasan |
 |---|---|
-| Cetak kartu | SDM → **Kartu QR absensi** (HRD/Top Management). Satu kartu ukuran ID (85,6 × 54 mm) per karyawan aktif, filter per proyek atau nama/kode. |
+| Cetak kartu | SDM → **Kartu QR absensi** (HRD/Top Management). Satu kartu ukuran ID (85,6 × 54 mm) per karyawan aktif **yang sudah ber-NIP**, filter per proyek atau nama/NIP. Karyawan tanpa NIP dihitung dan ditautkan ke Master Data untuk dilengkapi. |
 | Akun PIC | Menu **Pengguna** → peran *PIC absensi lapangan* (`ABSENSI`), satu akun per PIC. Akun ini hanya bisa membuka `/absen`. HRD/PJO/Top Management juga bisa membuka `/absen`. |
 | Pasang di HP | PIC login di HP, buka `/absen` sekali saat ada sinyal, lalu (opsional) *Tambahkan ke layar utama*. Setelah itu web tetap terbuka walau tanpa sinyal. |
 | Scan | Kamera langsung aktif; arahkan ke kartu, scan berikutnya otomatis. Scanner Bluetooth/USB (mode keyboard) juga diterima. |
@@ -38,9 +38,15 @@ jadi langsung terpakai di rekap SDM dan payroll.
   tanpa sinyal. Syaratnya PIC pernah membuka `/absen` sekali saat online setelah rilis.
 - Sesi login berlaku 8 jam. Bila habis, scan tetap tersimpan; PIC login ulang dan antrean terkirim.
 
+## NIP dan isi QR
+
+Kartu, layar scan dan rekap menampilkan **NIP** (`Employee.nip`, dari E-HSE); kode internal (`PJM-…`) tidak ditampilkan.
+QR berisi kode internal karena kode itu tetap dan unik, sedangkan NIP boleh kosong dan dapat diubah HRD. Akibatnya
+kartu tetap berlaku walau NIP diubah; cetak ulang bila NIP pada kartu perlu diperbarui.
+
 ## Keamanan kartu
 
-Isi QR: `PRHB1.<kode karyawan>.<tanda tangan HMAC>`. Tanpa `ATTENDANCE_QR_SECRET`, QR tidak bisa dibuat sendiri
+Isi QR: `PRHB1.<kode internal>.<tanda tangan HMAC>`. Tanpa `ATTENDANCE_QR_SECRET`, QR tidak bisa dibuat sendiri
 dari kode karyawan orang lain. Kartu cetak ulang identik dengan kartu lama. **Jangan ganti secret setelah kartu
 dicetak** — semua kartu lama menjadi tidak sah dan harus dicetak ulang. Tanda tangan hanya diperiksa server: saat
 offline HP menerima QR berformat benar, lalu kartu palsu ditolak ketika antrean terkirim. Nama karyawan tampil besar

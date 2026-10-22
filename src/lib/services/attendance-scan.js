@@ -14,7 +14,7 @@ import { STATUS } from "../ui-labels.js";
 
 const TIMEZONES = SCAN_TIMEZONES.map(([tz]) => tz);
 const CLIENT_ID = /^[A-Za-z0-9-]{8,64}$/;
-const employeeCard = { id: true, employeeNo: true, name: true, position: true };
+const employeeCard = { id: true, nip: true, name: true, position: true };
 
 /**
  * Terima antrean scan dari HP PIC absensi (langsung atau setelah offline).
@@ -147,11 +147,14 @@ async function processScan(item, sentAt, user, now) {
   });
 }
 
-/** Daftar karyawan aktif untuk menampilkan nama di HP PIC saat offline (tanpa data sensitif). */
+/**
+ * Daftar karyawan aktif untuk menampilkan nama & NIP di HP PIC saat offline (tanpa data sensitif).
+ * Kode internal ikut dikirim hanya untuk mencocokkan isi QR, tidak ditampilkan.
+ */
 export async function scanRoster() {
   const employees = await prisma.employee.findMany({
     where: { isActive: true },
-    select: { employeeNo: true, name: true, position: true },
+    select: { employeeNo: true, nip: true, name: true, position: true },
     orderBy: { employeeNo: "asc" },
     take: 5000,
   });
@@ -171,7 +174,7 @@ export async function scanRecap(day, projectId) {
       timeZone: true,
       method: true,
       scanUser: { select: { name: true } },
-      employee: { select: { id: true, name: true, employeeNo: true, position: true } },
+      employee: { select: { id: true, name: true, nip: true, position: true } },
       project: { select: { id: true, name: true } },
     },
   });
@@ -201,7 +204,7 @@ export async function scanRecap(day, projectId) {
         OR: [{ endDate: null }, { endDate: { gte: date } }],
         employee: { isActive: true },
       },
-      select: { employee: { select: { id: true, name: true, employeeNo: true, position: true } } },
+      select: { employee: { select: { id: true, name: true, nip: true, position: true } } },
       orderBy: { employee: { name: "asc" } },
     });
     missing = assignments.map((a) => a.employee).filter((e) => !scanned.has(e.id));

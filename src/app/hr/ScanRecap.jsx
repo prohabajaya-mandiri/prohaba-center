@@ -56,7 +56,7 @@ export default function ScanRecap({ rows, missing, day, projectId, projects }) {
                 <tr key={r.id + r.projectName}>
                   <td>
                     <div className="cell-title">{r.name}</div>
-                    <div className="muted">{r.employeeNo} · {r.position}</div>
+                    <div className="muted">{r.nip ? `NIP ${r.nip}` : "NIP belum diisi"} · {r.position}</div>
                   </td>
                   <td>{r.projectName}</td>
                   <td>
@@ -96,7 +96,7 @@ export default function ScanRecap({ rows, missing, day, projectId, projects }) {
           <div className="card-body" style={{ display: "flex", flexWrap: "wrap", gap: 8 }}>
             {missing.map((e) => (
               <span key={e.id} className="chip" style={{ fontSize: 13.5, padding: "5px 12px" }}>
-                {e.name}<span style={{ color: "var(--gray-500)" }}> · {e.employeeNo}</span>
+                {e.name}<span style={{ color: "var(--gray-500)" }}> · {e.nip ? `NIP ${e.nip}` : "NIP belum diisi"}</span>
               </span>
             ))}
           </div>

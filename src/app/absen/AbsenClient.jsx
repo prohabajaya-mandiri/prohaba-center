@@ -126,6 +126,7 @@ async function flush(key) {
             status: r.status,
             message: r.message ?? null,
             name: r.employee?.name ?? i.name,
+            nip: r.employee ? r.employee.nip : i.nip,
             position: r.employee?.position ?? i.position,
             projectName: r.projectName ?? null,
             count: r.count ?? null,
@@ -207,7 +208,8 @@ export default function AbsenClient({ user }) {
       timeZone,
       method,
       status: "pending",
-      employeeNo,
+      employeeNo, // kode internal dari QR: hanya untuk mencocokkan, tidak ditampilkan
+      nip: person?.nip ?? null,
       name: person?.name ?? null,
       position: person?.position ?? null,
     };
@@ -381,7 +383,7 @@ export default function AbsenClient({ user }) {
             <li key={i.clientId} className={"absen-row " + i.status}>
               <span className="absen-row-time">{localTime(i.recordedAt ?? i.scannedAt, i.timeZone)}</span>
               <span className="absen-row-main">
-                <strong>{i.name ?? i.employeeNo}</strong>
+                <strong>{i.name ?? "Kartu terbaca"}</strong>
                 <span>{rowDetail(i)}</span>
               </span>
               <StatusIcon status={i.status} />
@@ -394,11 +396,13 @@ export default function AbsenClient({ user }) {
   );
 }
 
+const nipLabel = (i) => (i.nip ? `NIP ${i.nip}` : i.name ? "NIP belum diisi" : null);
+
 function rowDetail(i) {
   if (i.status === "rejected") return i.message;
-  if (i.status === "pending") return `${i.employeeNo} · belum terkirim`;
-  if (i.status === "duplicate") return `${i.employeeNo} · scan ganda, tidak dihitung`;
-  return [i.employeeNo, i.projectName, i.count && `scan ke-${i.count}`].filter(Boolean).join(" · ");
+  if (i.status === "pending") return [nipLabel(i), "belum terkirim"].filter(Boolean).join(" · ");
+  if (i.status === "duplicate") return [nipLabel(i), "scan ganda, tidak dihitung"].filter(Boolean).join(" · ");
+  return [nipLabel(i), i.projectName, i.count && `scan ke-${i.count}`].filter(Boolean).join(" · ");
 }
 
 function StatusIcon({ status }) {
@@ -445,7 +449,7 @@ function ScanBanner({ banner, item, sync }) {
       </div>
     );
   if (!item) return null;
-  const who = item.name ?? item.employeeNo;
+  const who = item.name ? (item.nip ? `${item.name} · NIP ${item.nip}` : item.name) : "Kartu terbaca";
   const time = localTime(item.recordedAt ?? item.scannedAt, item.timeZone);
   if (banner.local === "duplicate" || item.status === "duplicate")
     return (
