@@ -1,21 +1,14 @@
 import { redirect } from "next/navigation";
 import { auth } from "@/lib/auth";
 import { canAccess } from "@/lib/access";
-import { prisma } from "@/lib/prisma";
-import KioskClient from "./KioskClient";
+import AbsenClient from "./AbsenClient";
 
-export const metadata = { title: "Kiosk Absensi" };
+export const metadata = { title: "Absensi Lapangan", manifest: "/absen.webmanifest" };
 
-// Halaman scan layar penuh tanpa sidebar, untuk laptop/tablet di pos absensi.
+// Web absensi untuk HP PIC lapangan: scan kamera, antrean offline, tanpa menu ERP.
 export default async function AbsenPage() {
   const session = await auth();
   if (!session?.user) redirect("/login");
   if (!canAccess(session.user.role, "/absen")) redirect("/dashboard");
-  const projects = await prisma.project.findMany({
-    where: { status: "ACTIVE" },
-    select: { id: true, name: true, location: true },
-    orderBy: { name: "asc" },
-    take: 1000,
-  });
-  return <KioskClient projects={projects} user={session.user} />;
+  return <AbsenClient user={{ id: session.user.id, name: session.user.name }} />;
 }

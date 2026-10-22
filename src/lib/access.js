@@ -1,5 +1,5 @@
 const STAFF_ROLES = ['TOP_MANAGEMENT', 'HRD', 'PJO', 'LOGISTIK', 'FINANCE', 'ENGINEERING', 'WORKSHOP'];
-// Akun perangkat kiosk absensi: hanya bisa membuka halaman scan /absen.
+// Akun PIC absensi lapangan: hanya bisa membuka web absensi /absen.
 export const KIOSK_ROLE = 'ABSENSI';
 export const ROLES = [...STAFF_ROLES, KIOSK_ROLE];
 const moduleRoles = {

@@ -13,11 +13,11 @@ export default function ScanRecap({ rows, missing, day, projectId, projects }) {
           <div>
             <div className="card-title">Rekap scan barcode</div>
             <div className="card-subtitle">
-              Scan pertama setiap hari otomatis tercatat HADIR di absensi harian. Kehadiran lengkap bila minimal {MIN_SCANS}× scan.
+              Scan pertama setiap hari otomatis tercatat HADIR di absensi harian pada proyek penugasan karyawan. Kehadiran lengkap bila minimal {MIN_SCANS}× scan. Jam bertanda “offline” dikirim belakangan dari HP PIC.
             </div>
           </div>
           <Link href="/absen" className="btn btn-primary" target="_blank">
-            <ScanLine aria-hidden /> Buka kiosk scan
+            <ScanLine aria-hidden /> Buka web absensi
           </Link>
         </div>
         <form className="card-body toolbar" style={{ alignItems: "flex-end" }}>
@@ -46,6 +46,7 @@ export default function ScanRecap({ rows, missing, day, projectId, projects }) {
                 <th>Karyawan</th>
                 <th>Proyek</th>
                 <th>Jam scan</th>
+                <th>PIC</th>
                 <th className="num">Jumlah</th>
                 <th>Keterangan</th>
               </tr>
@@ -55,18 +56,23 @@ export default function ScanRecap({ rows, missing, day, projectId, projects }) {
                 <tr key={r.id + r.projectName}>
                   <td>
                     <div className="cell-title">{r.name}</div>
-                    <div className="muted">{r.employeeNo} · {r.position}</div>
+                    <div className="muted">{r.nip ? `NIP ${r.nip}` : "NIP belum diisi"} · {r.position}</div>
                   </td>
                   <td>{r.projectName}</td>
                   <td>
                     <div style={{ display: "flex", flexWrap: "wrap", gap: 6 }}>
                       {r.scans.map((s, i) => (
-                        <span key={i} className="chip" title={s.method === "KAMERA" ? "Scan kamera" : "Scanner"}>
-                          {localTime(s.at, s.timeZone)} {timeZoneLabel(s.timeZone)}
+                        <span
+                          key={i}
+                          className={"chip" + (s.receivedAt ? " chip-warn" : "")}
+                          title={`Di-scan ${s.by} (${s.method === "KAMERA" ? "kamera" : "scanner"})` + (s.receivedAt ? ` · offline, terkirim ${fmtDate(s.receivedAt)} ${localTime(s.receivedAt, s.timeZone)}` : "")}
+                        >
+                          {localTime(s.at, s.timeZone)} {timeZoneLabel(s.timeZone)}{s.receivedAt ? " · offline" : ""}
                         </span>
                       ))}
                     </div>
                   </td>
+                  <td>{[...new Set(r.scans.map((s) => s.by))].join(", ")}</td>
                   <td className="num">{r.scans.length}×</td>
                   <td>
                     {r.scans.length >= MIN_SCANS
@@ -75,7 +81,7 @@ export default function ScanRecap({ rows, missing, day, projectId, projects }) {
                   </td>
                 </tr>
               ))}
-              {!rows.length && <EmptyRow colSpan={5} title={`Belum ada scan pada ${fmtDate(day)}`} hint="Scan kartu QR di kiosk absensi untuk mencatat kehadiran." />}
+              {!rows.length && <EmptyRow colSpan={6} title={`Belum ada scan pada ${fmtDate(day)}`} hint="PIC lapangan men-scan kartu QR karyawan lewat web absensi." />}
             </tbody>
           </table>
         </div>
@@ -90,7 +96,7 @@ export default function ScanRecap({ rows, missing, day, projectId, projects }) {
           <div className="card-body" style={{ display: "flex", flexWrap: "wrap", gap: 8 }}>
             {missing.map((e) => (
               <span key={e.id} className="chip" style={{ fontSize: 13.5, padding: "5px 12px" }}>
-                {e.name}<span style={{ color: "var(--gray-500)" }}> · {e.employeeNo}</span>
+                {e.name}<span style={{ color: "var(--gray-500)" }}> · {e.nip ? `NIP ${e.nip}` : "NIP belum diisi"}</span>
               </span>
             ))}
           </div>
