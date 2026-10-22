@@ -8,9 +8,13 @@ const nextConfig = {
       { key: 'Referrer-Policy', value: 'strict-origin-when-cross-origin' },
       { key: 'Permissions-Policy', value: 'camera=(), microphone=(), geolocation=()' },
     ] }, {
-      // Kiosk absensi memindai kartu QR lewat kamera; aturan terakhir menimpa aturan di atas.
+      // Web absensi lapangan memindai kartu QR lewat kamera; aturan terakhir menimpa aturan di atas.
       source: '/absen',
       headers: [{ key: 'Permissions-Policy', value: 'camera=(self), microphone=(), geolocation=()' }],
+    }, {
+      // Service worker web absensi harus selalu diperiksa ulang agar pembaruan cepat sampai ke HP PIC.
+      source: '/absen-sw.js',
+      headers: [{ key: 'Cache-Control', value: 'no-cache' }],
     }];
   },
   outputFileTracingIncludes: {

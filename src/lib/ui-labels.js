@@ -9,7 +9,7 @@ export const ROLE_LABELS = {
   FINANCE: 'Finance',
   ENGINEERING: 'Engineering',
   WORKSHOP: 'Workshop',
-  ABSENSI: 'Kiosk absensi (perangkat scan)',
+  ABSENSI: 'PIC absensi lapangan',
 };
 
 export const STATUS = {
