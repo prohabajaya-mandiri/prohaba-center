@@ -56,7 +56,7 @@ export const MODULE_TABS = {
   '/hr': {
     param: 'tab',
     items: [
-      ['absensi', 'Absensi harian'],
+      ['absensi', 'Absensi & koreksi'],
       ['scan', 'Rekap scan barcode'],
       ['kartu', 'Kartu QR absensi', ['TOP_MANAGEMENT', 'HRD']],
     ],
