@@ -30,6 +30,7 @@ model User {
   boqActuals          BoqActual[]
   attendancesEntered  Attendance[]      @relation("AttendanceEntered")
   attendancesVerified Attendance[]      @relation("AttendanceVerified")
+  attendancesEdited   Attendance[]      @relation("AttendanceEdited")
   attendanceScans     AttendanceScan[]
   approvals           PayrollApproval[]
   documents           Document[]
@@ -576,11 +577,16 @@ model Attendance {
   verifiedBy String?
   verifiedAt DateTime?
   notes      String?
+  // Koreksi terakhir oleh HRD (lembur/status). Riwayat lengkap (nilai lama & baru) ada di audit log.
+  editedBy   String?
+  editedAt   DateTime?
+  editReason String?
   createdAt  DateTime  @default(now())
 
   employee   Employee @relation(fields: [employeeId], references: [id])
   enterUser  User     @relation("AttendanceEntered", fields: [enteredBy], references: [id])
   verifyUser User?    @relation("AttendanceVerified", fields: [verifiedBy], references: [id])
+  editUser   User?    @relation("AttendanceEdited", fields: [editedBy], references: [id])
   scans      AttendanceScan[]
 
   @@unique([employeeId, date])

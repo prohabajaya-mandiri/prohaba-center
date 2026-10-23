@@ -12,6 +12,7 @@ import { currentTab, tabLabel } from "@/lib/module-tabs";
 import { scanRecap } from "@/lib/services/attendance-scan";
 import { attendanceCards } from "@/lib/attendance-cards";
 import { DEFAULT_TIMEZONE, localDate } from "@/lib/attendance-scan";
+import { ATTENDANCE_HRD_ROLES } from "@/lib/services/payroll";
 import ScanRecap from "./ScanRecap";
 import QrCards from "./QrCards";
 
@@ -28,13 +29,17 @@ export default async function HRPage({ searchParams }) {
   try {
     if (query?.date) filterDate = date(query.date).toISOString().slice(0, 10);
   } catch {}
+  const filterSource = ["SCAN", "MANUAL"].includes(query?.source) ? query.source : "";
   // Status aktif karyawan mengikuti Master Data Karyawan (E-HSE).
   await ensureFreshEmployees();
-  const where = filterDate ? { date: new Date(filterDate + "T00:00:00Z") } : {};
+  const where = {
+    ...(filterDate ? { date: new Date(filterDate + "T00:00:00Z") } : {}),
+    ...(filterSource ? { scans: filterSource === "SCAN" ? { some: {} } : { none: {} } } : {}),
+  };
   const [employees, rows, total, projects] = await Promise.all([
     prisma.employee.findMany({
       where: { isActive: true },
-      select: { id: true, name: true, position: true },
+      select: { id: true, name: true, position: true, nip: true },
       orderBy: { name: "asc" },
       take: 1000,
     }),
@@ -43,9 +48,12 @@ export default async function HRPage({ searchParams }) {
       skip: paging.skip,
       take: paging.take,
       include: {
-        employee: { select: { name: true } },
+        employee: { select: { name: true, nip: true } },
         project: { select: { name: true } },
         enterUser: { select: { name: true } },
+        editUser: { select: { name: true } },
+        scans: { select: { scannedAt: true, timeZone: true }, orderBy: { scannedAt: "desc" }, take: 1 },
+        _count: { select: { scans: true } },
       },
       orderBy: [{ date: "desc" }, { id: "desc" }],
     }),
@@ -60,10 +68,16 @@ export default async function HRPage({ searchParams }) {
     id: a.id,
     date: a.date.toISOString(),
     employeeName: a.employee.name,
+    nip: a.employee.nip,
     projectName: a.project?.name ?? "Absensi lama tanpa proyek",
     status: a.status,
     overtime: a.overtime,
+    notes: a.notes,
     enteredBy: a.enterUser.name,
+    // Sumber: baris dengan log scan kartu QR = "Scan", selain itu dicatat manual.
+    scanCount: a._count.scans,
+    lastScan: a.scans[0] ? { at: a.scans[0].scannedAt.toISOString(), timeZone: a.scans[0].timeZone } : null,
+    edit: a.editedAt ? { by: a.editUser?.name ?? "-", at: a.editedAt.toISOString(), reason: a.editReason } : null,
   }));
   return (
     <AppLayout
@@ -78,11 +92,13 @@ export default async function HRPage({ searchParams }) {
         projects={projects}
         user={session.user}
         filterDate={filterDate}
+        filterSource={filterSource}
+        canCorrect={ATTENDANCE_HRD_ROLES.includes(session.user.role)}
       />
       <ListPager
         page={paging.page}
         total={total}
-        query={filterDate ? { date: filterDate } : {}}
+        query={{ ...(filterDate ? { date: filterDate } : {}), ...(filterSource ? { source: filterSource } : {}) }}
       />
     </AppLayout>
   );
