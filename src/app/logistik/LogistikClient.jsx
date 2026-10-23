@@ -256,12 +256,13 @@ export default function LogistikClient({ tab: activeTab = 'fuel', user, vehicles
                     <EmptyRow colSpan={5} title="Belum ada riwayat BBM" />
                   ) : (
                     fuelLogs.map(log => (
-                      <tr key={log.id}>
+                      <tr key={log.id} style={log.voidedAt ? { opacity: 0.55 } : undefined}>
                         <td className="nowrap">{fmtDate(log.date)}</td>
                         <td><div className="cell-title">{log.vehicle.name}</div><div className="cell-sub">{log.vehicle.code || log.vehicle.plateNumber || '-'}</div></td>
                         <td>{log.project?.code || '-'}</td>
                         <td>
                           {log.liters}L <span className="badge badge-gray">{log.fuelType}</span>
+                          {log.source === 'DRUM' && <div className="cell-sub">Drum site · {log.operator}{log.voidedAt ? ' · dibatalkan' : ''}</div>}
                         </td>
                         <td style={{ fontWeight: 600 }}>{formatCurrency(log.totalCost)}</td>
                       </tr>
@@ -433,7 +434,7 @@ export default function LogistikClient({ tab: activeTab = 'fuel', user, vehicles
         </div>
       )}
       {activeTab === 'monitoring' && (
-        <MonitoringClient vehicles={vehicles} fuelLogs={fuelLogs} maintenanceLogs={maintenanceLogs} />
+        <MonitoringClient vehicles={vehicles} fuelLogs={fuelLogs.filter((l) => !l.voidedAt)} maintenanceLogs={maintenanceLogs} />
       )}
 
       {/* Vehicle Modal */}
@@ -470,6 +471,7 @@ export default function LogistikClient({ tab: activeTab = 'fuel', user, vehicles
                 <option value="KENDARAAN">Kendaraan (mobil, truk, pick-up)</option>
                 <option value="ALAT_BERAT">Alat berat (excavator, buldozer, dll.)</option>
                 <option value="GENSET">Genset / alat statis</option>
+                <option value="ALAT_KECIL">Alat kecil (pompa air, kompresor, mesin las, dll.)</option>
               </select>
             </div>
           </form>

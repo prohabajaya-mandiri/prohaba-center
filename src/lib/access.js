@@ -1,10 +1,14 @@
 const STAFF_ROLES = ['TOP_MANAGEMENT', 'HRD', 'PJO', 'LOGISTIK', 'FINANCE', 'ENGINEERING', 'WORKSHOP'];
 // Akun PIC absensi lapangan: hanya bisa membuka web absensi /absen.
 export const KIOSK_ROLE = 'ABSENSI';
-export const ROLES = [...STAFF_ROLES, KIOSK_ROLE];
+// Akun petugas BBM site: hanya bisa membuka web BBM /bbm untuk site tempatnya bertugas.
+export const FUEL_ROLE = 'FUELMAN';
+export const ROLES = [...STAFF_ROLES, KIOSK_ROLE, FUEL_ROLE];
+const FIELD_HOME = { [KIOSK_ROLE]: '/absen', [FUEL_ROLE]: '/bbm' };
 const moduleRoles = {
   dashboard: STAFF_ROLES, projects: STAFF_ROLES,
   absen: ['TOP_MANAGEMENT', 'HRD', 'PJO', KIOSK_ROLE],
+  bbm: [FUEL_ROLE],
   master: ['TOP_MANAGEMENT','HRD','LOGISTIK','FINANCE'],
   'master-data': ['TOP_MANAGEMENT','HRD','LOGISTIK','FINANCE'],
   scurve: ['TOP_MANAGEMENT', 'PJO', 'FINANCE', 'ENGINEERING'],
@@ -21,8 +25,10 @@ const moduleRoles = {
 };
 /** Halaman awal setelah login. */
 export function homePath(role) {
-  return role === KIOSK_ROLE ? '/absen' : '/dashboard';
+  return FIELD_HOME[role] ?? '/dashboard';
 }
+/** Akun lapangan (absensi, BBM) yang hanya punya satu halaman. */
+export const isFieldRole = (role) => role in FIELD_HOME;
 export function canAccess(role, pathname, method = 'GET') {
   const parts = pathname.split('/').filter(Boolean);
   const moduleName = parts[0] === 'api' ? parts[1] : parts[0];
@@ -32,6 +38,8 @@ export function canAccess(role, pathname, method = 'GET') {
   if (moduleName === 'documents') return ['TOP_MANAGEMENT', 'ENGINEERING', 'PJO'].includes(role);
   if (['scurve', 'boq'].includes(moduleName)) return ['TOP_MANAGEMENT', 'ENGINEERING', 'PJO'].includes(role);
   if (pathname.includes('/procurement/') && pathname.endsWith('/receive')) return ['TOP_MANAGEMENT','LOGISTIK'].includes(role);
+  // Pengiriman, persetujuan pengajuan dan pembatalan catatan BBM drum hanya oleh Logistik HO.
+  if (pathname.startsWith('/api/logistik/bbm/')) return ['TOP_MANAGEMENT', 'LOGISTIK'].includes(role);
   if (pathname === '/api/payroll/generate') return ['TOP_MANAGEMENT', 'HRD'].includes(role);
   return true;
 }

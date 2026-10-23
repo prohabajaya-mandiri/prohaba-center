@@ -27,6 +27,8 @@ import {
   localTime,
   timeZoneLabel,
 } from "@/lib/attendance-scan";
+import CameraScanner from "@/components/field/CameraScanner";
+import { feedback, newId, parse, readRaw, useOfflinePage, useScannerKeys, useStored, useWakeLock, writeJson } from "@/components/field/offline";
 
 // Web absensi lapangan untuk HP PIC. Setiap scan masuk antrean di HP (localStorage)
 // lalu dikirim ke server; tanpa sinyal, antrean tetap tersimpan dan dikirim begitu online.
@@ -40,42 +42,6 @@ const EMPTY = [];
 const NO_ROSTER = { employees: [] };
 
 // ─── Penyimpanan di HP ──────────────────────────────────────────────────────
-const memory = new Map();
-const listeners = new Set();
-function readRaw(key) {
-  try {
-    return localStorage.getItem(key) ?? memory.get(key) ?? "";
-  } catch {
-    return memory.get(key) ?? "";
-  }
-}
-function writeJson(key, value) {
-  const raw = JSON.stringify(value);
-  memory.set(key, raw);
-  try {
-    localStorage.setItem(key, raw);
-  } catch {}
-  listeners.forEach((l) => l());
-}
-function subscribe(callback) {
-  listeners.add(callback);
-  window.addEventListener("storage", callback);
-  return () => {
-    listeners.delete(callback);
-    window.removeEventListener("storage", callback);
-  };
-}
-function parse(raw, fallback) {
-  try {
-    return raw ? JSON.parse(raw) : fallback;
-  } catch {
-    return fallback;
-  }
-}
-function useStored(key, fallback) {
-  const raw = useSyncExternalStore(subscribe, () => readRaw(key), () => "");
-  return useMemo(() => parse(raw, fallback), [raw, fallback]);
-}
 function updateQueue(key, change) {
   const cutoff = Date.now() - OFFLINE_WINDOW_MS;
   const next = change(parse(readRaw(key), EMPTY))
@@ -85,8 +51,6 @@ function updateQueue(key, change) {
 }
 const noopSubscribe = () => () => {};
 const deviceZone = () => Intl.DateTimeFormat().resolvedOptions().timeZone;
-const newId = () =>
-  globalThis.crypto?.randomUUID?.() ?? `${Date.now().toString(36)}-${Math.random().toString(36).slice(2, 12)}`;
 
 // ─── Pengiriman antrean ─────────────────────────────────────────────────────
 let flushing = false;
@@ -138,26 +102,6 @@ async function flush(key) {
   } finally {
     flushing = false;
   }
-}
-
-// Bunyi & getar singkat sebagai umpan balik (tinggi = terbaca, rendah = ditolak).
-let audio;
-function feedback(ok) {
-  try {
-    navigator.vibrate?.(ok ? 70 : [120, 60, 120]);
-  } catch {}
-  try {
-    audio ??= new AudioContext();
-    (ok ? [880] : [220, 180]).forEach((freq, i) => {
-      const osc = audio.createOscillator(), gain = audio.createGain();
-      osc.frequency.value = freq;
-      gain.gain.value = 0.15;
-      osc.connect(gain).connect(audio.destination);
-      const start = audio.currentTime + i * 0.2;
-      osc.start(start);
-      osc.stop(start + (ok ? 0.12 : 0.18));
-    });
-  } catch {}
 }
 
 export default function AbsenClient({ user }) {
@@ -250,61 +194,11 @@ export default function AbsenClient({ user }) {
     };
   }, []);
 
-  // Scanner fisik (USB/Bluetooth) mengetik isi QR dengan cepat lalu Enter.
-  useEffect(() => {
-    let buffer = "", last = 0;
-    const onKey = (event) => {
-      if (event.target.closest?.("input, select, textarea")) return;
-      const now = performance.now();
-      if (now - last > 150) buffer = "";
-      last = now;
-      if (event.key === "Enter" || event.key === "Tab") {
-        if (buffer.length >= 10) {
-          event.preventDefault();
-          scanRef.current(buffer, "SCANNER");
-        }
-        buffer = "";
-      } else if (event.key.length === 1) buffer += event.key;
-    };
-    window.addEventListener("keydown", onKey);
-    return () => window.removeEventListener("keydown", onKey);
-  }, []);
+  useScannerKeys((value, method) => scanRef.current(value, method));
 
-  // Layar tetap menyala selama web absensi terbuka (bila didukung peramban).
-  useEffect(() => {
-    let lock;
-    const request = () => navigator.wakeLock?.request("screen").then((l) => (lock = l)).catch(() => {});
-    const visible = () => document.visibilityState === "visible" && request();
-    request();
-    document.addEventListener("visibilitychange", visible);
-    return () => {
-      document.removeEventListener("visibilitychange", visible);
-      lock?.release().catch(() => {});
-    };
-  }, []);
-
-  // Simpan halaman & aset di HP agar web absensi tetap terbuka tanpa sinyal (hanya build produksi).
-  useEffect(() => {
-    if (process.env.NODE_ENV !== "production" || !("serviceWorker" in navigator)) return;
-    const cacheAssets = () =>
-      caches
-        .open("absen-v1")
-        .then((cache) =>
-          cache.addAll([
-            ...new Set(
-              performance
-                .getEntriesByType("resource")
-                .map((e) => new URL(e.name))
-                .filter((u) => u.origin === location.origin && /^\/(_next\/static|brand)\//.test(u.pathname))
-                .map((u) => u.pathname + u.search),
-            ),
-          ]),
-        )
-        .catch(() => {});
-    navigator.serviceWorker.register("/absen-sw.js", { scope: "/absen" }).catch(() => {});
-    // Muat pemindai cadangan sekarang agar ikut tersimpan untuk dipakai offline.
-    import("jsqr").finally(() => setTimeout(cacheAssets, 1500));
-  }, []);
+  // Layar tetap menyala dan halaman tersimpan di HP agar web absensi terbuka tanpa sinyal.
+  useWakeLock();
+  useOfflinePage("/absen");
 
   const bannerItem = banner?.clientId ? items.find((i) => i.clientId === banner.clientId) : null;
   const bannerStatus = bannerItem?.status;
@@ -483,91 +377,6 @@ function ScanBanner({ banner, item, sync }) {
         <strong>{who}</strong>
         <span>{offline ? `Tersimpan di HP ${time} · terkirim otomatis saat ada sinyal` : `Mengirim… ${time}`}</span>
       </div>
-    </div>
-  );
-}
-
-function CameraScanner({ onCode }) {
-  const videoRef = useRef(null);
-  const onCodeRef = useRef(onCode);
-  const [error, setError] = useState("");
-
-  useEffect(() => {
-    onCodeRef.current = onCode;
-  });
-
-  useEffect(() => {
-    let stream, timer, stopped = false;
-    const last = { value: "", at: 0 };
-    const canvas = document.createElement("canvas");
-    const context = canvas.getContext("2d", { willReadFrequently: true });
-
-    async function detector() {
-      if ("BarcodeDetector" in window) {
-        try {
-          const formats = await window.BarcodeDetector.getSupportedFormats();
-          if (formats.includes("qr_code")) {
-            const native = new window.BarcodeDetector({ formats: ["qr_code"] });
-            return async (video) => (await native.detect(video))[0]?.rawValue;
-          }
-        } catch {}
-      }
-      const { default: jsQR } = await import("jsqr");
-      return (video) => {
-        const w = video.videoWidth, h = video.videoHeight;
-        if (!w || !h) return null;
-        const scale = Math.min(1, 640 / w);
-        canvas.width = Math.round(w * scale);
-        canvas.height = Math.round(h * scale);
-        context.drawImage(video, 0, 0, canvas.width, canvas.height);
-        const image = context.getImageData(0, 0, canvas.width, canvas.height);
-        return jsQR(image.data, image.width, image.height, { inversionAttempts: "dontInvert" })?.data;
-      };
-    }
-
-    (async () => {
-      try {
-        stream = await navigator.mediaDevices.getUserMedia({ video: { facingMode: "environment" }, audio: false });
-        if (stopped) return stream.getTracks().forEach((t) => t.stop());
-        const video = videoRef.current;
-        video.srcObject = stream;
-        await video.play();
-        const detect = await detector();
-        const tick = async () => {
-          if (stopped) return;
-          try {
-            const value = await detect(video);
-            // Kartu yang masih di depan kamera tidak dibaca berulang.
-            if (value && (value !== last.value || Date.now() - last.at > 5000)) {
-              last.value = value;
-              last.at = Date.now();
-              onCodeRef.current(value);
-            }
-          } catch {}
-          timer = setTimeout(tick, 200);
-        };
-        tick();
-      } catch (e) {
-        setError(
-          e?.name === "NotAllowedError"
-            ? "Akses kamera ditolak. Izinkan kamera untuk situs ini di pengaturan peramban."
-            : "Kamera tidak dapat dibuka di perangkat ini.",
-        );
-      }
-    })();
-
-    return () => {
-      stopped = true;
-      clearTimeout(timer);
-      stream?.getTracks().forEach((t) => t.stop());
-    };
-  }, []);
-
-  if (error) return <p role="alert" className="alert alert-danger absen-camera-error">{error}</p>;
-  return (
-    <div className="absen-camera">
-      <video ref={videoRef} muted playsInline />
-      <span className="absen-camera-frame" aria-hidden />
     </div>
   );
 }

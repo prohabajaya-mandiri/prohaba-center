@@ -1,13 +1,15 @@
 import bcrypt from "bcryptjs";
-import { ROLES } from "../access.js";
+import { ROLES, FUEL_ROLE } from "../access.js";
 import { object, text, choice, ensure } from "../validation.js";
 import { transaction, audit } from "../transactions.js";
 export async function saveUser(body, user, id) {
-  object(body, ["name", "email", "role", "password", "isActive"]);
+  object(body, ["name", "email", "role", "password", "isActive", "siteProjectId"]);
   const name = text(body.name, "Nama"),
     email = text(body.email, "Email", 254).toLowerCase(),
     role = choice(body.role, ROLES, "Role");
   ensure(/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email), "Email tidak valid.");
+  // Petugas BBM terikat ke satu site; peran lain tidak memakai site.
+  const siteProjectId = role === FUEL_ROLE ? text(body.siteProjectId, "Site petugas BBM") : null;
   ensure(
     body.isActive === undefined || typeof body.isActive === "boolean",
     "Status aktif tidak valid.",
@@ -23,6 +25,7 @@ export async function saveUser(body, user, id) {
   const hash = password ? await bcrypt.hash(password, 12) : undefined;
   return transaction(async (tx) => {
     const old = id ? await tx.user.findUniqueOrThrow({ where: { id } }) : null;
+    if (siteProjectId) await tx.project.findUniqueOrThrow({ where: { id: siteProjectId, status: "ACTIVE" } });
     if (
       old?.role === "TOP_MANAGEMENT" &&
       old.isActive &&
@@ -40,6 +43,7 @@ export async function saveUser(body, user, id) {
       name,
       email,
       role,
+      siteProjectId,
       isActive: body.isActive ?? true,
       ...(hash ? { password: hash } : {}),
       ...(id && (hash || body.isActive === false)

@@ -18,6 +18,7 @@ export default async function UsersPage({searchParams}) {
 
   const paging=await pageQuery(searchParams);
   const total=await prisma.user.count();
+  const projects=await prisma.project.findMany({where:{status:'ACTIVE'},select:{id:true,code:true,name:true},orderBy:{code:'asc'}});
   const users = await prisma.user.findMany({
     skip:paging.skip, take:paging.take,
     orderBy: { createdAt: 'desc' },
@@ -26,6 +27,7 @@ export default async function UsersPage({searchParams}) {
       name: true,
       email: true,
       role: true,
+      siteProjectId: true,
       isActive: true,
       createdAt: true
     }
@@ -33,7 +35,7 @@ export default async function UsersPage({searchParams}) {
 
   return (
     <AppLayout title="Manajemen Pengguna" subtitle="Kelola akun dan hak akses sistem" user={session.user}>
-      <UsersClient initialUsers={users} />
+      <UsersClient initialUsers={users} projects={projects} />
     <ListPager page={paging.page} total={total}/></AppLayout>
   );
 }

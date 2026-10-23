@@ -8,8 +8,8 @@ const nextConfig = {
       { key: 'Referrer-Policy', value: 'strict-origin-when-cross-origin' },
       { key: 'Permissions-Policy', value: 'camera=(), microphone=(), geolocation=()' },
     ] }, {
-      // Web absensi lapangan memindai kartu QR lewat kamera; aturan terakhir menimpa aturan di atas.
-      source: '/absen',
+      // Web absensi lapangan dan web BBM memindai kartu QR lewat kamera; aturan terakhir menimpa aturan di atas.
+      source: '/:page(absen|bbm)',
       headers: [{ key: 'Permissions-Policy', value: 'camera=(self), microphone=(), geolocation=()' }],
     }, {
       // Service worker web absensi harus selalu diperiksa ulang agar pembaruan cepat sampai ke HP PIC.

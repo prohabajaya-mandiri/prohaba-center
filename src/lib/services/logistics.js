@@ -16,7 +16,7 @@ export async function logistics(kind, body, user) {
     data = {
       code: text(body.code, "Kode", 100, true),
       name: text(body.name, "Nama"),
-      type: choice(body.type, ["ALAT_BERAT", "KENDARAAN", "GENSET"]),
+      type: choice(body.type, ["ALAT_BERAT", "KENDARAAN", "GENSET", "ALAT_KECIL"]),
       plateNumber: text(body.plateNumber, "Nomor polisi", 40, true),
       status: choice(body.status ?? "ACTIVE", [
         "ACTIVE",

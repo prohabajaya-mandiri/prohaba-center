@@ -1,0 +1,13 @@
+{
+  "name": "BBM Site Prohaba",
+  "short_name": "BBM Site",
+  "description": "Catat penerimaan, pengeluaran dan opname BBM drum di site",
+  "start_url": "/bbm",
+  "scope": "/bbm",
+  "display": "standalone",
+  "orientation": "portrait",
+  "background_color": "#ffffff",
+  "theme_color": "#ffffff",
+  "lang": "id",
+  "icons": [{ "src": "/icon.png", "sizes": "192x192", "type": "image/png", "purpose": "any" }]
+}

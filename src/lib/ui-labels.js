@@ -10,6 +10,7 @@ export const ROLE_LABELS = {
   ENGINEERING: 'Engineering',
   WORKSHOP: 'Workshop',
   ABSENSI: 'PIC absensi lapangan',
+  FUELMAN: 'Petugas BBM site',
 };
 
 export const STATUS = {
@@ -88,6 +89,7 @@ export const VEHICLE_TYPE = {
   KENDARAAN: 'Kendaraan',
   ALAT_BERAT: 'Alat berat',
   GENSET: 'Genset / alat statis',
+  ALAT_KECIL: 'Alat kecil (pompa, kompresor, dll.)',
 };
 
 export const MAINTENANCE_TYPE = {

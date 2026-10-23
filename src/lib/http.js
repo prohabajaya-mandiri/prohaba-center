@@ -41,10 +41,10 @@ export function api(handler) {
     }
   };
 }
-export async function json(request) {
+export async function json(request, limit = 250000) {
   if (!request.headers.get("content-type")?.startsWith("application/json"))
     throw new InputError("Content-Type harus application/json.", 415);
   const raw = await request.text();
-  if (raw.length > 250000) throw new InputError("Payload terlalu besar.", 413);
+  if (raw.length > limit) throw new InputError("Payload terlalu besar.", 413);
   return JSON.parse(raw);
 }

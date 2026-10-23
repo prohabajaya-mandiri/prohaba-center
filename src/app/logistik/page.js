@@ -5,6 +5,9 @@ import { canAccess } from '@/lib/access';
 import { auth } from '@/auth';
 import { prisma } from '@/lib/prisma';
 import LogistikClient from './LogistikClient';
+import FuelControlClient from './FuelControlClient';
+import { fuelOverview } from '@/lib/services/fuel';
+import { serialize } from '@/lib/serialization';
 import AppLayout from '@/components/AppLayout';
 import { currentTab, tabLabel } from '@/lib/module-tabs';
 
@@ -19,6 +22,15 @@ export default async function LogistikPage({searchParams}) {
   
   const paging=await pageQuery(searchParams);
   const tab=currentTab('/logistik',(await searchParams)?.tab,session.user.role);
+  // BBM drum site (stok, kiriman, anomali) dihitung di server dari seluruh catatan, bukan satu halaman.
+  if (tab.startsWith('bbm-')) {
+    const data=serialize(await fuelOverview());
+    return (
+      <AppLayout title="Logistik & Kendaraan" subtitle={tabLabel('/logistik',tab)} user={session.user}>
+        <FuelControlClient tab={tab} data={data} canEdit={['TOP_MANAGEMENT','LOGISTIK'].includes(session.user.role)} />
+      </AppLayout>
+    );
+  }
   const [fuelCount,maintenanceCount]=await Promise.all([prisma.fuelLog.count(),prisma.maintenanceLog.count()]);
   const vehicles = await prisma.vehicle.findMany({take:1000,
     orderBy: { createdAt: 'desc' }

@@ -1308,6 +1308,71 @@ details.card[open] > summary::after { transform: rotate(-135deg) translateY(-3px
 .absen-empty { padding: 20px 16px; text-align: center; font-size: 14px; color: var(--gray-500); }
 .chip-warn { background: var(--yellow-50); color: var(--yellow-700); }
 
+/* ─── Web BBM site (/bbm, HP petugas BBM) — memakai kerangka web absensi ── */
+.bbm-body { display: grid; gap: 12px; padding: 16px; padding-bottom: max(16px, env(safe-area-inset-bottom)); align-content: start; }
+.bbm-body .absen-today { padding: 0; }
+.bbm-stock { display: grid; gap: 2px; padding: 16px; border-radius: var(--radius-lg); background: var(--navy-700, #1e3a5f); color: #fff; }
+.bbm-stock-label { font-size: 12.5px; opacity: 0.8; }
+.bbm-stock strong { font-size: 32px; line-height: 1.15; font-variant-numeric: tabular-nums; }
+.bbm-stock span { font-size: 13.5px; opacity: 0.9; }
+.bbm-stock .bbm-negative { color: #fecaca; }
+.bbm-notice { display: flex; align-items: center; gap: 10px; width: 100%; padding: 12px 14px; border-radius: var(--radius-lg); border: 1px solid; font: inherit; font-size: 14px; text-align: left; cursor: pointer; }
+.bbm-notice svg { width: 22px; height: 22px; flex: none; }
+.bbm-notice.warn { background: var(--yellow-50); border-color: var(--yellow-500); color: var(--yellow-700); }
+.bbm-notice.info { background: var(--blue-50); border-color: var(--blue-500); color: var(--blue-600); }
+.bbm-actions { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; }
+.bbm-action { display: grid; justify-items: start; gap: 2px; min-height: 104px; padding: 14px; border-radius: var(--radius-lg); border: 1px solid var(--gray-200); background: var(--white); color: var(--gray-900); font: inherit; text-align: left; cursor: pointer; }
+.bbm-action svg { width: 26px; height: 26px; margin-bottom: 6px; color: var(--navy-700, var(--gray-700)); }
+.bbm-action strong { font-size: 15.5px; }
+.bbm-action span { font-size: 12.5px; color: var(--gray-500); }
+.bbm-action.primary { grid-column: 1 / -1; min-height: 88px; grid-template-columns: auto 1fr; grid-template-rows: auto auto; column-gap: 14px; align-items: center; background: var(--brand-600, #2563eb); border-color: transparent; color: #fff; }
+.bbm-action.primary svg { grid-row: 1 / 3; width: 34px; height: 34px; margin: 0; color: #fff; }
+.bbm-action.primary strong { font-size: 18px; }
+.bbm-action.primary span { color: rgba(255, 255, 255, 0.85); }
+.bbm-step { display: flex; align-items: center; gap: 8px; margin: 4px 0 0; font-size: 15px; font-weight: 600; color: var(--gray-900); }
+.bbm-step span { display: inline-flex; align-items: center; justify-content: center; width: 24px; height: 24px; border-radius: var(--radius-full); background: var(--gray-900); color: #fff; font-size: 13px; }
+.bbm-card { display: grid; gap: 14px; padding: 14px; border-radius: var(--radius-lg); border: 1px solid var(--gray-200); background: var(--white); }
+.bbm-card .form-group { margin: 0; }
+.bbm-row { display: flex; gap: 8px; justify-content: space-between; flex-wrap: wrap; }
+.bbm-chip { display: flex; align-items: center; gap: 12px; padding: 10px 12px; border-radius: var(--radius-lg); background: var(--green-50); border: 1px solid var(--green-500); }
+.bbm-chip > svg { width: 24px; height: 24px; flex: none; color: var(--green-700); }
+.bbm-chip > div { flex: 1; min-width: 0; display: grid; }
+.bbm-chip strong { font-size: 16px; color: var(--gray-900); overflow-wrap: anywhere; }
+.bbm-chip span { font-size: 12.5px; color: var(--gray-600); }
+.bbm-search { position: relative; }
+.bbm-search svg { position: absolute; left: 12px; top: 50%; width: 18px; height: 18px; transform: translateY(-50%); color: var(--gray-400); }
+.bbm-search .form-input { padding-left: 38px; }
+.bbm-list { list-style: none; margin: 0; padding: 0; border-radius: var(--radius-lg); border: 1px solid var(--gray-200); background: var(--white); overflow: hidden; }
+.bbm-list li + li { border-top: 1px solid var(--gray-100); }
+.bbm-list button { display: grid; gap: 2px; width: 100%; min-height: 56px; padding: 10px 14px; border: 0; background: none; font: inherit; text-align: left; cursor: pointer; }
+.bbm-list button:active { background: var(--gray-50); }
+.bbm-list strong { font-size: 15px; font-weight: 500; color: var(--gray-900); }
+.bbm-list span { font-size: 12.5px; color: var(--gray-500); }
+.bbm-big-input { font-size: 22px; font-weight: 600; font-variant-numeric: tabular-nums; min-height: 52px; }
+.bbm-quick { display: flex; flex-wrap: wrap; gap: 6px; margin-top: 8px; }
+.bbm-quick .chip { min-height: 36px; padding: 6px 14px; border: 1px solid var(--gray-200); font-size: 14px; cursor: pointer; }
+.bbm-quick .chip.active { background: var(--gray-900); border-color: var(--gray-900); color: #fff; }
+.bbm-segment { display: grid; grid-auto-flow: column; grid-auto-columns: 1fr; gap: 6px; }
+.bbm-segment button { min-height: 48px; padding: 8px; border: 1px solid var(--gray-300); border-radius: var(--radius-md, 8px); background: var(--white); font: inherit; font-size: 13.5px; font-weight: 500; color: var(--gray-700); cursor: pointer; }
+.bbm-segment button.active { background: var(--gray-900); border-color: var(--gray-900); color: #fff; }
+.bbm-segment button.active.danger { background: var(--red-600); border-color: var(--red-600); }
+.bbm-photo { display: flex; align-items: center; gap: 12px; }
+.bbm-photo img { width: 96px; height: 96px; object-fit: cover; border-radius: var(--radius-md, 8px); border: 1px solid var(--gray-200); }
+.bbm-stepper { display: grid; grid-template-columns: 52px 1fr 52px; gap: 8px; }
+.bbm-stepper .btn { min-height: 52px; justify-content: center; }
+.bbm-stepper .form-input { text-align: center; }
+.bbm-open { display: grid; grid-template-columns: 32px 88px 1fr 40px; align-items: center; gap: 8px; }
+.bbm-open .bbm-quick { margin: 0; }
+.bbm-open-no { font-weight: 600; color: var(--gray-500); }
+.bbm-total { display: flex; justify-content: space-between; align-items: baseline; padding: 12px 14px; border-radius: var(--radius-lg); background: var(--gray-900); color: #fff; }
+.bbm-total strong { font-size: 24px; font-variant-numeric: tabular-nums; }
+.bbm-facts { grid-template-columns: 1fr 1fr; }
+.bbm-facts div { display: grid; gap: 2px; }
+.bbm-facts span { font-size: 12.5px; color: var(--gray-500); }
+.bbm-facts strong { font-size: 18px; font-variant-numeric: tabular-nums; color: var(--gray-900); }
+.bbm-submit { min-height: 54px; justify-content: center; font-size: 16px; }
+@media (max-width: 380px) { .bbm-open { grid-template-columns: 28px 1fr 40px; } .bbm-open .bbm-quick { grid-column: 2 / -1; grid-row: 2; } }
+
 /* ─── Kartu QR absensi (ukuran kartu ID 85,6 × 54 mm) ─────────────────── */
 .qr-sheet { display: flex; flex-wrap: wrap; gap: 4mm; }
 .qr-card { width: 85.6mm; height: 54mm; box-sizing: border-box; display: flex; align-items: center; gap: 4mm; padding: 4mm; border: 1px solid var(--gray-300); border-radius: 3mm; background: #fff; color: #111; break-inside: avoid; page-break-inside: avoid; }
@@ -1390,6 +1455,7 @@ th { letter-spacing: 0.04em; }
 .text-xs { font-size: 12.5px; }
 .text-sm { font-size: 13.5px; }
 .text-base { font-size: 15px; }
+.text-danger { color: var(--red-600); }
 .font-medium { font-weight: 500; }
 .font-semibold, .font-bold { font-weight: 600; }
 .text-gray, .text-gray-500 { color: var(--gray-500); }
