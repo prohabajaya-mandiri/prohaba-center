@@ -1,6 +1,6 @@
 import { NextResponse } from 'next/server';
 import { auth } from '@/auth';
-import { canAccess, homePath, KIOSK_ROLE } from '@/lib/access';
+import { canAccess, homePath, isFieldRole } from '@/lib/access';
 
 export default auth((req) => {
   const pathname = req.nextUrl.pathname;
@@ -13,11 +13,11 @@ export default auth((req) => {
   }
   if (!req.auth?.user) return NextResponse.redirect(new URL('/login', req.url));
   if (!canAccess(req.auth.user.role, pathname)) {
-    if (req.auth.user.role === KIOSK_ROLE) return NextResponse.redirect(new URL('/absen', req.url));
+    if (isFieldRole(req.auth.user.role)) return NextResponse.redirect(new URL(homePath(req.auth.user.role), req.url));
     return new NextResponse('Forbidden', { status: 403 });
   }
   return NextResponse.next();
 });
 export const config = {
-  matcher: ['/((?!api/|_next/static|_next/image|brand/|favicon.ico|icon.png|apple-icon.png|absen-sw.js|absen.webmanifest|.*\\.(?:svg|png|jpg|jpeg|webp|ico)$).*)'],
+  matcher: ['/((?!api/|_next/static|_next/image|brand/|favicon.ico|icon.png|apple-icon.png|absen-sw.js|absen.webmanifest|bbm.webmanifest|.*\\.(?:svg|png|jpg|jpeg|webp|ico)$).*)'],
 };

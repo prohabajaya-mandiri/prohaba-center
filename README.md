@@ -65,6 +65,10 @@ Restore drill memakai schema sementara, memeriksa jumlah dan isi baris, kemudian
 
 Data karyawan disatukan dengan Database Personel E-HSE: E-HSE adalah sumber data, ERP memakai form yang sama dan menyimpan salinan lokal untuk penugasan, absensi dan payroll. Perlu `HSE_API_URL` dan `HSE_INTEGRATION_SECRET` (sama dengan `INTEGRATION_CENTER_SECRET` di E-HSE). Untuk development jalankan E-HSE di port 3001. Rincian, keamanan dan cara menautkan pegawai lama: docs/integrasi-master-karyawan.md.
 
+## BBM drum site
+
+Pencatatan BBM drum dari HO ke site: petugas BBM mencatat terima kiriman, pengambilan (scan kartu QR absensi pengambil), opname dan pengajuan drum lewat web HP `/bbm` yang bisa offline; Logistik HO memantau stok, kiriman, pengajuan dan anomali di menu Logistik & Kendaraan. Rincian dan aturan: docs/bbm-drum-site.md.
+
 ## Penggunaan setelah perbaikan
 
 Finance menyiapkan mapping akun dan saldo awal melalui Master Data. HRD mengisi karyawan (Master Data → Karyawan, bersumber dari E-HSE), penugasan dan tarif proyek sebelum payroll. Persetujuan dan pembayaran terpisah. Semua proyek terlihat sesuai izin modul; tidak ada isolasi anggota proyek.

@@ -6,9 +6,9 @@ import { UserPlus, Pencil, AlertCircle } from 'lucide-react'
 import { EmptyRow, Modal, SearchField } from '@/components/ui'
 import { ROLE_LABELS, initials, fmtDate } from '@/lib/ui-labels'
 
-const EMPTY = { name: '', email: '', password: '', role: 'PJO', isActive: true }
+const EMPTY = { name: '', email: '', password: '', role: 'PJO', isActive: true, siteProjectId: '' }
 
-export default function UsersClient({ initialUsers }) {
+export default function UsersClient({ initialUsers, projects = [] }) {
   const [users, setUsers] = useState(initialUsers)
   const [search, setSearch] = useState('')
   const [isModalOpen, setIsModalOpen] = useState(false)
@@ -26,7 +26,7 @@ export default function UsersClient({ initialUsers }) {
     setErrorMsg('')
     if (user) {
       setEditingId(user.id)
-      setFormData({ name: user.name, email: user.email, password: '', role: user.role, isActive: user.isActive })
+      setFormData({ name: user.name, email: user.email, password: '', role: user.role, isActive: user.isActive, siteProjectId: user.siteProjectId ?? '' })
     } else {
       setEditingId(null)
       setFormData(EMPTY)
@@ -43,7 +43,7 @@ export default function UsersClient({ initialUsers }) {
       const res = await apiFetch(editingId ? `/api/users/${editingId}` : '/api/users', {
         method: editingId ? 'PUT' : 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify(formData),
+        body: JSON.stringify({ ...formData, siteProjectId: formData.role === 'FUELMAN' ? formData.siteProjectId : null }),
       })
       const data = await res.json()
       setUsers(editingId ? users.map((u) => (u.id === editingId ? data : u)) : [...users, data])
@@ -93,7 +93,10 @@ export default function UsersClient({ initialUsers }) {
                       </div>
                     </div>
                   </td>
-                  <td><span className="badge badge-navy">{ROLE_LABELS[u.role] ?? u.role}</span></td>
+                  <td>
+                    <span className="badge badge-navy">{ROLE_LABELS[u.role] ?? u.role}</span>
+                    {u.role === 'FUELMAN' && <div className="cell-sub">Site {projects.find((p) => p.id === u.siteProjectId)?.code ?? '-'}</div>}
+                  </td>
                   <td>{u.isActive ? <span className="badge badge-success">Aktif</span> : <span className="badge badge-gray">Nonaktif</span>}</td>
                   <td className="nowrap">{fmtDate(u.createdAt, { day: 'numeric', month: 'long', year: 'numeric' })}</td>
                   <td>
@@ -150,6 +153,16 @@ export default function UsersClient({ initialUsers }) {
                 </select>
               </div>
             </div>
+            {formData.role === 'FUELMAN' && (
+              <div className="form-group">
+                <label className="form-label required" htmlFor="u-site">Site tempat bertugas</label>
+                <select id="u-site" className="form-select" required value={formData.siteProjectId} onChange={set('siteProjectId')}>
+                  <option value="">Pilih site</option>
+                  {projects.map((p) => <option key={p.id} value={p.id}>{p.code} · {p.name}</option>)}
+                </select>
+                <p className="form-hint">Petugas hanya mencatat BBM untuk site ini lewat web BBM di HP.</p>
+              </div>
+            )}
           </form>
         </Modal>
       )}

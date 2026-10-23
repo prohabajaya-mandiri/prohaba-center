@@ -17,7 +17,8 @@ model User {
   name      String
   email     String   @unique
   password  String
-  role      String // TOP_MANAGEMENT | HRD | PJO | LOGISTIK | FINANCE | ENGINEERING | WORKSHOP
+  role      String // TOP_MANAGEMENT | HRD | PJO | LOGISTIK | FINANCE | ENGINEERING | WORKSHOP | ABSENSI | FUELMAN
+  siteProjectId String? // site tempat akun petugas BBM (FUELMAN) bertugas
   sessionVersion Int @default(0)
   isActive  Boolean  @default(true)
   createdAt DateTime @default(now())
@@ -37,6 +38,11 @@ model User {
   auditLogs           AuditLog[]
   fuelLogs            FuelLog[]
   maintenanceLogs     MaintenanceLog[]
+  siteProject         Project?          @relation("UserSite", fields: [siteProjectId], references: [id])
+  fuelShipmentsSent   FuelShipment[]    @relation("FuelShipmentSender")
+  fuelShipmentsRecv   FuelShipment[]    @relation("FuelShipmentReceiver")
+  fuelStockCounts     FuelStockCount[]
+  fuelRequests        FuelRequest[]
 }
 
 // ─── PROJECT ──────────────────────────────────────────────────────────────────
@@ -72,6 +78,10 @@ model Project {
   sitePurchases     SitePurchase[]
   fuelLogs          FuelLog[]
   maintenanceLogs   MaintenanceLog[]
+  siteUsers         User[]            @relation("UserSite")
+  fuelShipments     FuelShipment[]
+  fuelStockCounts   FuelStockCount[]
+  fuelRequests      FuelRequest[]
 }
 
 // ─── S-CURVE & PROGRESS ───────────────────────────────────────────────────────
@@ -495,6 +505,7 @@ model Employee {
   attendances  Attendance[]
   attendanceScans AttendanceScan[]
   payrollItems PayrollItem[]
+  fuelTaken    FuelLog[]
 
   @@index([isActive, name])
   @@index([hseUpdatedAt])
@@ -696,7 +707,7 @@ model Vehicle {
   name        String // e.g., Excavator PC 200
   plateNumber String? // e.g., B 1234 XYZ
   code        String?  @unique // e.g., EXC-01
-  type        String // ALAT_BERAT | KENDARAAN | GENSET
+  type        String // ALAT_BERAT | KENDARAAN | GENSET | ALAT_KECIL
   status      String   @default("ACTIVE") // ACTIVE | MAINTENANCE | INACTIVE
   notes       String?
   createdAt   DateTime @default(now())
@@ -707,26 +718,129 @@ model Vehicle {
 }
 
 model FuelLog {
-  id         String   @id @default(cuid())
+  id         String    @id @default(cuid())
   vehicleId  String
   projectId  String?
   date       DateTime
   fuelType   String // SOLAR | DEXLITE | PERTAMAX | etc
   liters     Float
-  totalCost  Decimal @db.Decimal(20, 2)
+  totalCost  Decimal   @db.Decimal(20, 2)
   meterValue Float? // Odometer or Hour Meter
   operator   String?
   notes      String?
   recordedBy String // User ID
+  // Pengeluaran dari stok drum site oleh petugas BBM (source DRUM). MANUAL = input ERP (mis. isi di SPBU).
+  source     String    @default("MANUAL") // MANUAL | DRUM
+  clientId   String?   @unique // id dari HP petugas agar antrean offline tidak tercatat dua kali
+  method     String? // FLOW_METER | TAKARAN | PERKIRAAN
+  employeeId String? // pengambil (scan kartu QR absensi)
+  takerName  String? // pengambil tanpa kartu (subkon/tamu)
+  runHours   Float? // genset tanpa HM: lama nyala sejak isi terakhir
+  receivedAt DateTime? // diterima server (beda jauh dari date = dikirim dari antrean offline)
+  voidedAt   DateTime? // dibatalkan HO; tidak dihitung di stok
+  voidedBy   String?
+  voidReason String?
 
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
 
-  vehicle Vehicle  @relation(fields: [vehicleId], references: [id])
-  project Project? @relation(fields: [projectId], references: [id])
-  user    User     @relation(fields: [recordedBy], references: [id])
+  vehicle  Vehicle    @relation(fields: [vehicleId], references: [id])
+  project  Project?   @relation(fields: [projectId], references: [id])
+  user     User       @relation(fields: [recordedBy], references: [id])
+  employee Employee?  @relation(fields: [employeeId], references: [id])
+  photo    FuelPhoto?
+
   @@index([projectId, date])
   @@index([vehicleId, date])
+  @@index([employeeId, date])
+}
+
+// Foto meter HM/km saat pengambilan BBM (kecil, dikompres di HP).
+model FuelPhoto {
+  fuelLogId String  @id
+  data      Bytes
+  fuelLog   FuelLog @relation(fields: [fuelLogId], references: [id], onDelete: Cascade)
+}
+
+// Pengiriman drum BBM dari HO ke site, sekaligus konfirmasi penerimaannya di site.
+model FuelShipment {
+  id              String    @id @default(cuid())
+  number          String    @unique // BBM-2026-000001
+  projectId       String
+  requestId       String?   @unique
+  fuelType        String    @default("SOLAR")
+  drums           Int
+  liters          Float
+  pricePerLiter   Decimal   @db.Decimal(20, 2)
+  driver          String?
+  plateNumber     String?
+  sealNumbers     String?
+  notes           String?
+  status          String    @default("SENT") // SENT | RECEIVED | CANCELLED
+  sentAt          DateTime
+  createdBy       String
+  receivedDrums   Int?
+  receivedLiters  Float?
+  sealIntact      Boolean?
+  receiveNotes    String?
+  receivedAt      DateTime?
+  receivedBy      String?
+  receiveClientId String?   @unique
+  createdAt       DateTime  @default(now())
+  updatedAt       DateTime  @updatedAt
+
+  project  Project      @relation(fields: [projectId], references: [id])
+  request  FuelRequest? @relation(fields: [requestId], references: [id])
+  sender   User         @relation("FuelShipmentSender", fields: [createdBy], references: [id])
+  receiver User?        @relation("FuelShipmentReceiver", fields: [receivedBy], references: [id])
+
+  @@index([projectId, status])
+}
+
+// Stock opname BBM site: drum penuh + perkiraan isi drum terbuka. Menjadi patokan stok berikutnya.
+model FuelStockCount {
+  id          String   @id @default(cuid())
+  clientId    String   @unique
+  projectId   String
+  countedAt   DateTime
+  fullDrums   Int
+  openLiters  Float
+  totalLiters Float
+  notes       String?
+  countedBy   String
+  receivedAt  DateTime @default(now())
+
+  project Project @relation(fields: [projectId], references: [id])
+  counter User    @relation(fields: [countedBy], references: [id])
+
+  @@index([projectId, countedAt])
+}
+
+// Pengajuan drum dari site ke HO; angka stok & pemakaian disalin server saat diajukan.
+model FuelRequest {
+  id            String    @id @default(cuid())
+  number        String    @unique // PBB-2026-000001
+  clientId      String    @unique
+  projectId     String
+  drums         Int
+  notes         String?
+  status        String    @default("SUBMITTED") // SUBMITTED | APPROVED | REJECTED | SHIPPED
+  requestedBy   String
+  requestedAt   DateTime
+  stockLiters   Float
+  usage14d      Float
+  lastCountAt   DateTime?
+  decidedBy     String?
+  decidedAt     DateTime?
+  decisionNotes String?
+  createdAt     DateTime  @default(now())
+  updatedAt     DateTime  @updatedAt
+
+  project   Project       @relation(fields: [projectId], references: [id])
+  requester User          @relation(fields: [requestedBy], references: [id])
+  shipment  FuelShipment?
+
+  @@index([projectId, status])
 }
 
 model MaintenanceLog {

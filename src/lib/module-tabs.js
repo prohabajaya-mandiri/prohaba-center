@@ -35,7 +35,10 @@ export const MODULE_TABS = {
   '/logistik': {
     param: 'tab',
     items: [
-      ['fuel', 'Penggunaan BBM'],
+      ['bbm-stok', 'Stok BBM site'],
+      ['bbm-kirim', 'Kiriman & pengajuan BBM'],
+      ['bbm-anomali', 'Anomali BBM'],
+      ['fuel', 'Log penggunaan BBM'],
       ['maintenance', 'Perawatan & servis'],
       ['vehicles', 'Kendaraan & alat berat'],
       ['monitoring', 'Monitoring per kendaraan'],
