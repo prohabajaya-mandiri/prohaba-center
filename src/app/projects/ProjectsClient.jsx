@@ -3,15 +3,15 @@ import { apiFetch } from '@/lib/client-api';
 
 import { useMemo, useState } from 'react';
 import { useRouter } from 'next/navigation';
-import { Building2, Plus, Calendar, MapPin, Trash2, Pencil, Wallet } from 'lucide-react';
+import { Building2, Plus, Calendar, MapPin, Trash2, Pencil, Wallet, Link2, AlertTriangle } from 'lucide-react';
 import { useDialog } from '@/components/DialogProvider';
 import { Modal, SearchField, StatusBadge } from '@/components/ui';
 import { idr, fmtDate } from '@/lib/ui-labels';
 
-const EMPTY = { code: '', name: '', client: '', location: '', contractValue: '', startDate: '', endDate: '', status: 'ACTIVE' };
+const EMPTY = { code: '', name: '', client: '', location: '', contractValue: '', startDate: '', endDate: '', status: 'ACTIVE', hseSiteId: '' };
 const toDateInput = (v) => (v ? new Date(v).toISOString().split('T')[0] : '');
 
-export default function ProjectsClient({ initialProjects, user }) {
+export default function ProjectsClient({ initialProjects, user, sites, sitesError }) {
   const router = useRouter();
   const [projects, setProjects] = useState(initialProjects);
   const [search, setSearch] = useState('');
@@ -43,6 +43,8 @@ export default function ProjectsClient({ initialProjects, user }) {
     startDate: toDateInput(p.startDate),
     endDate: toDateInput(p.endDate),
     status: p.status || 'ACTIVE',
+    hseSiteId: p.hseSiteId || '',
+    hseSiteOriginal: p.hseSiteId || '',
   });
 
   const handleArchive = async (p) => {
@@ -70,8 +72,10 @@ export default function ProjectsClient({ initialProjects, user }) {
     setIsSubmitting(true);
     try {
       const editing = Boolean(form.id);
-      const { id, ...body } = form;
+      const { id, hseSiteOriginal, ...body } = form;
       if (!editing) delete body.status;
+      // Tautan site hanya dikirim bila berubah, sehingga data lain tetap bisa diubah saat E-HSE tidak terhubung.
+      if (!body.hseSiteId || body.hseSiteId === hseSiteOriginal) delete body.hseSiteId;
       const res = await apiFetch(editing ? `/api/projects/${id}` : '/api/projects', {
         method: editing ? 'PATCH' : 'POST',
         headers: { 'Content-Type': 'application/json' },
@@ -91,6 +95,11 @@ export default function ProjectsClient({ initialProjects, user }) {
 
   return (
     <div className="stack">
+      {sitesError && (
+        <p role="alert" className="alert alert-warning">
+          <AlertTriangle aria-hidden /> <span>Daftar site E-HSE tidak dapat dimuat: {sitesError}</span>
+        </p>
+      )}
       <div className="toolbar">
         <SearchField value={search} onChange={setSearch} placeholder="Cari kode, nama, klien, atau lokasi" />
         <div className="spacer" />
@@ -126,6 +135,10 @@ export default function ProjectsClient({ initialProjects, user }) {
 
               <div className="project-meta">
                 <div className="project-meta-item"><MapPin size={15} /> {p.location || '-'}</div>
+                <div className="project-meta-item">
+                  <Link2 size={15} />
+                  {p.hseSiteCode ? `Site E-HSE ${p.hseSiteCode}${p.hseSiteName ? ` — ${p.hseSiteName}` : ''}` : <span className="text-danger">Belum ditautkan ke site E-HSE</span>}
+                </div>
                 <div className="project-meta-item"><Calendar size={15} /> {fmtDate(p.startDate)} – {fmtDate(p.endDate)}</div>
                 <div className="project-meta-item"><Wallet size={15} /> Nilai kontrak {idr(p.contractValue)}</div>
               </div>
@@ -182,6 +195,16 @@ export default function ProjectsClient({ initialProjects, user }) {
                 </div>
               )}
             </div>
+            {sites && (
+              <div className="form-group">
+                <label className="form-label required" htmlFor="pj-site">Site E-HSE</label>
+                <select id="pj-site" className="form-select" required={!form.id || !form.hseSiteId} value={form.hseSiteId} onChange={set('hseSiteId')}>
+                  <option value="">Pilih site</option>
+                  {sites.map((s) => <option key={s.id} value={s.id}>{s.code} — {s.name}</option>)}
+                </select>
+                <span className="form-hint">Karyawan yang ditempatkan di site ini (E-HSE) otomatis ditugaskan ke proyek bila site hanya punya satu proyek aktif.</span>
+              </div>
+            )}
             <div className="form-group">
               <label className="form-label required" htmlFor="pj-name">Nama proyek</label>
               <input id="pj-name" className="form-input" required value={form.name} onChange={set('name')} />

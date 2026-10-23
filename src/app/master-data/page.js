@@ -3,6 +3,7 @@ import { redirect } from "next/navigation";
 import { prisma } from "@/lib/prisma";
 import { listMaster, masterRoles } from "@/lib/services/master";
 import { ensureFreshEmployees } from "@/lib/services/employees";
+import { assignmentIssues } from "@/lib/services/assignments";
 import { pagination } from "@/lib/validation";
 import AppLayout from "@/components/AppLayout";
 import MasterClient from "./MasterClient";
@@ -30,16 +31,19 @@ export default async function MasterPage({ searchParams }) {
         <EmployeesSection key={JSON.stringify(query ?? {})} user={session.user} query={query} />
       </AppLayout>
     );
+  // Sinkronkan dahulu agar penugasan otomatis dari penempatan E-HSE sudah terbentuk sebelum daftar dibaca.
+  if (resource === "assignments") await ensureFreshEmployees();
   const result = await listMaster(resource, session.user, { skip, take });
+  const issues = resource === "assignments" ? await assignmentIssues() : null;
   const projects =
     resource === "assignments"
       ? await prisma.project.findMany({
           where: { status: "ACTIVE" },
-          select: { id: true, code: true, name: true },
+          select: { id: true, code: true, name: true, hseSiteCode: true },
+          orderBy: { code: "asc" },
           take: 500,
         })
       : [];
-  if (resource === "assignments") await ensureFreshEmployees();
   // Hanya karyawan aktif yang sudah tertaut ke Master Data Karyawan (E-HSE) yang dapat ditugaskan.
   const employees =
     resource === "assignments"
@@ -63,6 +67,7 @@ export default async function MasterPage({ searchParams }) {
         result={result}
         projects={projects}
         employees={employees}
+        issues={issues}
         page={page}
       />
     </AppLayout>

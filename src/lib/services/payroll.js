@@ -133,19 +133,18 @@ export async function attendance(body, user) {
     "Lembur hanya untuk kehadiran.",
   );
   return transaction(async (tx) => {
-    const assignment = await tx.employeeProject.findUnique({
+    // Satu karyawan bisa punya beberapa periode penugasan di proyek yang sama; cari yang mencakup tanggal.
+    const assignment = await tx.employeeProject.findFirst({
       where: {
-        employeeId_projectId: {
-          employeeId: data.employeeId,
-          projectId: data.projectId,
-        },
+        employeeId: data.employeeId,
+        projectId: data.projectId,
+        startDate: { lte: data.date },
+        OR: [{ endDate: null }, { endDate: { gte: data.date } }],
       },
       include: { employee: true },
     });
     ensure(
-      assignment?.employee.isActive &&
-        assignment.startDate <= data.date &&
-        (!assignment.endDate || assignment.endDate >= data.date),
+      assignment?.employee.isActive,
       "Pegawai tidak ditugaskan pada proyek/tanggal ini.",
     );
     const locked = await tx.payroll.findUnique({

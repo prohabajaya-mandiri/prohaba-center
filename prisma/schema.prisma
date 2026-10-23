@@ -57,6 +57,10 @@ model Project {
   startDate     DateTime
   endDate       DateTime
   status        String   @default("ACTIVE") // ACTIVE | COMPLETED | ON_HOLD
+  // Site E-HSE tempat proyek berjalan (satu master site). Penugasan karyawan diturunkan dari penempatan di site ini.
+  hseSiteId     String?
+  hseSiteCode   String?
+  hseSiteName   String?
   createdAt     DateTime @default(now())
   updatedAt     DateTime @updatedAt
 
@@ -82,6 +86,8 @@ model Project {
   fuelShipments     FuelShipment[]
   fuelStockCounts   FuelStockCount[]
   fuelRequests      FuelRequest[]
+
+  @@index([hseSiteId, status])
 }
 
 // ─── S-CURVE & PROGRESS ───────────────────────────────────────────────────────
@@ -490,6 +496,9 @@ model Employee {
   isActive            Boolean   @default(true) // false bila mantan personel di E-HSE
   hseUpdatedAt        DateTime? // updatedAt E-HSE terakhir yang diterima (kursor sinkronisasi)
   syncedAt            DateTime?
+  hseSiteId           String? // site penempatan aktif di E-HSE
+  hseSiteIsHo         Boolean   @default(false)
+  placementsSyncedAt  DateTime? // null = riwayat penempatan E-HSE belum pernah diterima
   // Kolom data lama (sebelum terintegrasi E-HSE). Dikosongkan setelah tertaut; jangan dipakai untuk data baru.
   nik                 String?   @unique // NIK utuh hanya disimpan terenkripsi di E-HSE
   department          String?
@@ -506,9 +515,29 @@ model Employee {
   attendanceScans AttendanceScan[]
   payrollItems PayrollItem[]
   fuelTaken    FuelLog[]
+  placements   EmployeePlacement[]
 
   @@index([isActive, name])
   @@index([hseUpdatedAt])
+  @@index([hseSiteId])
+}
+
+// Salinan riwayat penempatan site dari E-HSE (Placement). Ditulis ulang utuh setiap sinkronisasi personel.
+model EmployeePlacement {
+  id         String    @id // Placement.id di E-HSE
+  employeeId String
+  hseSiteId  String
+  siteCode   String
+  siteIsHo   Boolean   @default(false)
+  position   String
+  startDate  DateTime
+  endDate    DateTime?
+  status     String // ACTIVE | ENDED
+
+  employee Employee @relation(fields: [employeeId], references: [id], onDelete: Cascade)
+
+  @@index([employeeId, startDate])
+  @@index([hseSiteId, status])
 }
 
 model EmployeeProject {
@@ -518,6 +547,9 @@ model EmployeeProject {
   startDate  DateTime
   endDate    DateTime?
   role       String
+  // PLACEMENT = dibuat/ditutup otomatis dari penempatan E-HSE; MANUAL = diisi HRD.
+  source      String  @default("MANUAL")
+  placementId String? // Placement.id E-HSE yang menjadi dasar penugasan otomatis
 
   payType String @default("UNSET")
   dailyRate Decimal? @db.Decimal(20, 2)
@@ -527,7 +559,8 @@ model EmployeeProject {
   employee Employee @relation(fields: [employeeId], references: [id])
   project  Project  @relation(fields: [projectId], references: [id], onDelete: Cascade)
 
-  @@unique([employeeId, projectId])
+  // Boleh lebih dari satu periode per proyek (keluar lalu kembali ke site); periode tidak boleh tumpang tindih.
+  @@index([employeeId, projectId])
   @@index([projectId, startDate])
 }
 

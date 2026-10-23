@@ -6,7 +6,8 @@ export function calculatePayroll(assignment, attendances, start, next) {
   ensure(
     ["DAILY", "MONTHLY"].includes(assignment.payType) &&
       assignment.overtimeRate != null,
-    "Tarif penugasan belum lengkap.",
+    // Penugasan otomatis dari penempatan E-HSE dibuat tanpa tarif; sebutkan namanya agar HRD tahu yang harus diisi.
+    `Tarif penugasan ${emp.name} belum lengkap. Isi di Master Data → Penugasan & tarif.`,
   );
   const rows = attendances.filter(
     (a) =>

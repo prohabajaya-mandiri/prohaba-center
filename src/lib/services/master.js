@@ -11,6 +11,7 @@ import {
 } from "../validation.js";
 import { STANDARD_ACCOUNTS } from "./ledger.js";
 import { MASTER_ROLES } from "../module-tabs.js";
+import { checkManualAssignment } from "./assignments.js";
 // Satu sumber aturan dengan sub-menu Master Data di sidebar.
 export const masterRoles = MASTER_ROLES;
 // Karyawan tidak dikelola di sini: lihat lib/services/employees.js (sumber data E-HSE).
@@ -38,15 +39,16 @@ export async function listMaster(
   return {
     rows: await prisma[models[resource]].findMany({
       ...paging,
-      orderBy: { id: "asc" },
       ...(resource === "assignments"
         ? {
+            // Penugasan berjalan dan yang tarifnya belum diisi tampil lebih dulu.
+            orderBy: [{ endDate: { sort: "desc", nulls: "first" } }, { payType: "desc" }, { startDate: "desc" }, { id: "asc" }],
             include: {
-              employee: { select: { name: true } },
-              project: { select: { name: true, code: true } },
+              employee: { select: { name: true, siteCode: true } },
+              project: { select: { name: true, code: true, hseSiteCode: true } },
             },
           }
-        : {}),
+        : { orderBy: { id: "asc" } }),
     }),
     total: await prisma[models[resource]].count(),
   };
@@ -170,6 +172,7 @@ export async function saveMaster(resource, body, user, id) {
       const employee = await tx.employee.findUnique({ where: { id: data.employeeId }, select: { personnelId: true, isActive: true } });
       ensure(employee?.isActive, "Pegawai tidak ditemukan atau tidak aktif.");
       ensure(employee.personnelId, "Pegawai belum tertaut ke Master Data Karyawan (E-HSE). Tautkan dahulu.");
+      await checkManualAssignment(tx, data, id);
     }
     if (
       resource === "accounts" &&
