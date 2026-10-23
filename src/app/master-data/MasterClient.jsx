@@ -2,7 +2,7 @@
 import { apiFetch } from "@/lib/client-api";
 import { useState } from "react";
 import { useRouter } from "next/navigation";
-import { Plus, Pencil, Info } from "lucide-react";
+import { Plus, Pencil, Info, AlertTriangle } from "lucide-react";
 import { EmptyRow, Modal } from "@/components/ui";
 import ListPager from "@/components/ListPager";
 
@@ -86,6 +86,91 @@ const OPTION_LABEL = {
   true: "Aktif",
   false: "Nonaktif",
 };
+const fmtDay = (v) => new Date(v).toLocaleDateString("id-ID", { day: "numeric", month: "short", year: "numeric" });
+
+/** Penugasan yang perlu ditindaklanjuti HRD setelah sinkronisasi penempatan E-HSE. */
+function AssignmentIssues({ issues, onAssign }) {
+  const { pending, sitesWithoutProject, mismatched, unsetRates, unlinkedProjects } = issues;
+  if (!pending.length && !sitesWithoutProject.length && !mismatched.length && !unsetRates && !unlinkedProjects.length) return null;
+  return (
+    <div className="card">
+      <div className="card-header">
+        <div>
+          <div className="card-title">Perlu ditindaklanjuti</div>
+          <div className="card-subtitle">Penugasan mengikuti penempatan site di E-HSE. Proyek ERP ditautkan ke site di menu Proyek.</div>
+        </div>
+      </div>
+      <div className="card-body stack">
+        {unsetRates > 0 && (
+          <p className="alert alert-warning">
+            <AlertTriangle aria-hidden />
+            <span>{unsetRates} penugasan berjalan belum diisi tarifnya (ditandai &quot;Tarif belum diisi&quot; di tabel). Payroll proyeknya tidak dapat dibuat sampai tarif lengkap.</span>
+          </p>
+        )}
+        {unlinkedProjects.length > 0 && (
+          <p className="alert alert-warning">
+            <AlertTriangle aria-hidden />
+            <span>Proyek aktif belum ditautkan ke site E-HSE: {unlinkedProjects.map((p) => p.code).join(", ")}. Penugasan baru ke proyek ini ditolak sampai ditautkan.</span>
+          </p>
+        )}
+        {sitesWithoutProject.length > 0 && (
+          <p className="alert alert-info">
+            <Info aria-hidden />
+            <span>
+              Site tanpa proyek ERP aktif: {sitesWithoutProject.map((s) => `${s.siteCode} (${s.count} orang)`).join(", ")}. Karyawan di site ini belum ditugaskan.
+            </span>
+          </p>
+        )}
+        {pending.length > 0 && (
+          <div>
+            <strong>Pilih proyek ({pending.length})</strong>
+            <p className="muted" style={{ fontSize: 14 }}>Site penempatan punya lebih dari satu proyek aktif.</p>
+            <div className="table-wrapper">
+              <table>
+                <thead>
+                  <tr><th>Karyawan</th><th>Site</th><th>Mulai penempatan</th><th className="num">Tugaskan ke</th></tr>
+                </thead>
+                <tbody>
+                  {pending.map((e) => (
+                    <tr key={e.id}>
+                      <td className="cell-title">{e.name}{e.nip && <div className="muted">NIP {e.nip}</div>}</td>
+                      <td>{e.siteCode}</td>
+                      <td>{fmtDay(e.startDate)}</td>
+                      <td className="num">
+                        <div className="row-actions">
+                          {e.projects.map((p) => (
+                            <button key={p.id} className="btn btn-outline btn-sm" title={p.name}
+                              onClick={() => onAssign({ employeeId: e.id, projectId: p.id, role: e.role, startDate: e.startDate })}>
+                              {p.code}
+                            </button>
+                          ))}
+                        </div>
+                      </td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+          </div>
+        )}
+        {mismatched.length > 0 && (
+          <div>
+            <strong>Tidak sesuai penempatan ({mismatched.length})</strong>
+            <p className="muted" style={{ fontSize: 14 }}>
+              Karyawan tidak ditempatkan di site proyek pada tanggal mulai penugasan. Perbaiki penugasan atau penempatannya di E-HSE.
+            </p>
+            <ul style={{ fontSize: 14, paddingLeft: 18 }}>
+              {mismatched.map((a) => (
+                <li key={a.id}>{a.employee.name} — {a.project.code}{a.project.hseSiteCode ? ` (site ${a.project.hseSiteCode})` : ""}, mulai {fmtDay(a.startDate)}</li>
+              ))}
+            </ul>
+          </div>
+        )}
+      </div>
+    </div>
+  );
+}
+
 const humanize = (v) =>
   v === null || v === undefined || v === "" ? "—" : OPTION_LABEL[v] ?? String(v).replaceAll("_", " ");
 
@@ -94,9 +179,11 @@ export default function MasterClient({
   result,
   projects,
   employees,
+  issues,
   page,
 }) {
   const [editing, setEditing] = useState(null),
+    [prefill, setPrefill] = useState(null),
     [open, setOpen] = useState(false),
     [error, setError] = useState(""),
     [busy, setBusy] = useState(false);
@@ -149,14 +236,22 @@ export default function MasterClient({
     }
   }
 
-  const openForm = (row) => {
+  const openForm = (row, initial = null) => {
     setEditing(row);
+    setPrefill(initial);
     setError("");
     setOpen(true);
   };
 
   const cell = (row, key, type) => {
-    if (key === "employeeId") return row.employee?.name ?? "—";
+    if (key === "employeeId")
+      return (
+        <>
+          {row.employee?.name ?? "—"}
+          {row.source === "PLACEMENT" && <span className="badge badge-info" style={{ marginLeft: 6 }} title="Dibuat otomatis dari penempatan site di E-HSE">Otomatis</span>}
+          {row.payType === "UNSET" && <span className="badge badge-warning" style={{ marginLeft: 6 }}>Tarif belum diisi</span>}
+        </>
+      );
     if (key === "projectId") return row.project?.code ?? "—";
     if (type?.startsWith?.("date") && row[key])
       return new Date(row[key]).toLocaleDateString("id-ID", { day: "numeric", month: "short", year: "numeric" });
@@ -166,6 +261,7 @@ export default function MasterClient({
 
   return (
     <div className="stack">
+      {issues && <AssignmentIssues issues={issues} onAssign={(initial) => openForm(null, initial)} />}
       <div className="card">
 
         <div className="toolbar" style={{ padding: "16px 20px", borderBottom: "1px solid var(--gray-200)" }}>
@@ -257,7 +353,7 @@ export default function MasterClient({
             </>
           }
         >
-          <form onSubmit={save} id="master-form" key={editing?.id ?? "new"} className="form-stack">
+          <form onSubmit={save} id="master-form" key={editing?.id ?? prefill?.employeeId ?? "new"} className="form-stack">
             {error && <p role="alert" className="alert alert-danger">{error}</p>}
             {resource === "assignments" && (
               <p className="alert alert-info">
@@ -268,13 +364,13 @@ export default function MasterClient({
               {FIELDS[resource].map(([key, label, type]) => {
                 const options =
                   type === "projects"
-                    ? projects.map((i) => [i.id, i.code + " — " + i.name])
+                    ? projects.map((i) => [i.id, i.code + " — " + i.name + (i.hseSiteCode ? " · site " + i.hseSiteCode : " · belum bertaut site")])
                     : type === "employees"
                       ? employees.map((i) => [i.id, i.name + (i.nip ? " · NIP " + i.nip : "")])
                       : Array.isArray(type)
                         ? type.map((i) => [i, i === "" ? "Tanpa mapping" : humanize(i)])
                         : null;
-                const raw = editing?.[key],
+                const raw = editing?.[key] ?? prefill?.[key],
                   value =
                     typeof type === "string" && type.startsWith("date") && raw
                       ? new Date(raw).toISOString().slice(0, 10)

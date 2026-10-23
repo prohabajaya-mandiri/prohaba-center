@@ -71,6 +71,6 @@ Pencatatan BBM drum dari HO ke site: petugas BBM mencatat terima kiriman, pengam
 
 ## Penggunaan setelah perbaikan
 
-Finance menyiapkan mapping akun dan saldo awal melalui Master Data. HRD mengisi karyawan (Master Data → Karyawan, bersumber dari E-HSE), penugasan dan tarif proyek sebelum payroll. Persetujuan dan pembayaran terpisah. Semua proyek terlihat sesuai izin modul; tidak ada isolasi anggota proyek.
+Finance menyiapkan mapping akun dan saldo awal melalui Master Data. HRD mengisi karyawan (Master Data → Karyawan, bersumber dari E-HSE). Proyek ditautkan ke site E-HSE; penugasan mengikuti penempatan site di E-HSE dan HRD melengkapi tarifnya sebelum payroll (docs/integrasi-master-karyawan.md). Persetujuan dan pembayaran terpisah. Semua proyek terlihat sesuai izin modul; tidak ada isolasi anggota proyek.
 
 Rincian perubahan, bukti pengujian, batas kapasitas, dan kebijakan pencatatan ada di docs/remediation-2026-10-15.md. Payroll belum menghitung BPJS/PPh/potongan otomatis. Log BBM/perawatan baru masuk buku besar setelah dibuat faktur pembelian yang sesuai. Pembayaran pada aplikasi adalah pencatatan, bukan transfer bank.

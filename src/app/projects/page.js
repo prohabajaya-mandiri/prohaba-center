@@ -6,6 +6,8 @@ import { redirect } from 'next/navigation';
 import AppLayout from '@/components/AppLayout';
 import { prisma } from '@/lib/prisma';
 import ProjectsClient from './ProjectsClient';
+import { hseConfigured } from '@/lib/hse-client';
+import { hseSites } from '@/lib/services/employees';
 
 export const metadata = {
   title: 'Proyek',
@@ -25,6 +27,15 @@ export default async function ProjectsPage({searchParams}) {
     where, skip:paging.skip, take:paging.take,
     orderBy: { createdAt: 'desc' }
   });
+  // Site E-HSE untuk menautkan proyek (satu master site). Bila E-HSE tidak terhubung, tautan yang ada tetap tampil.
+  let sites = null, sitesError = '';
+  if (hseConfigured()) {
+    try {
+      sites = (await hseSites()).filter((s) => s.isActive && !s.isHo).map(({ id, code, name }) => ({ id, code, name }));
+    } catch (error) {
+      sitesError = error.message;
+    }
+  }
 
   return (
     <AppLayout 
@@ -32,7 +43,7 @@ export default async function ProjectsPage({searchParams}) {
       subtitle={`${total} proyek tercatat`}
       user={session.user}
     >
-      <ProjectsClient initialProjects={projects} user={session.user} />
+      <ProjectsClient initialProjects={projects} user={session.user} sites={sites} sitesError={sitesError} />
     <ListPager page={paging.page} total={total}/></AppLayout>
   );
 }

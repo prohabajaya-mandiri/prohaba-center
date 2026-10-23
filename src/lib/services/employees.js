@@ -12,6 +12,7 @@ import { hseConfigured, hseFetch, SYSTEM_ACTOR } from "../hse-client.js";
 import { audit, transaction } from "../transactions.js";
 import { ensure, InputError } from "../validation.js";
 import { MASTER_ROLES } from "../module-tabs.js";
+import { reconcileAssignments } from "./assignments.js";
 
 export const EMPLOYEE_ROLES = MASTER_ROLES.employees;
 // Sesuai matriks E-HSE: HRD mengubah data; Top Management (= Direksi di E-HSE) hanya melihat.
@@ -40,6 +41,8 @@ export function mirrorData(p, now = new Date()) {
     position: p.position,
     siteCode: p.siteCode ?? null,
     siteName: p.siteName ?? null,
+    // Umpan versi lama tanpa id site: biarkan nilai yang sudah tersalin.
+    ...(p.siteId !== undefined && { hseSiteId: p.siteId, hseSiteIsHo: Boolean(p.siteIsHo) }),
     workStatus: p.workStatus ?? null,
     employmentType: p.employmentType ?? null,
     contractEndDate: day(p.contractEndDate),
@@ -69,7 +72,42 @@ async function upsertRows(rows) {
   const changed = rows.filter((p) => existing.has(p.id));
   for (let i = 0; i < changed.length; i += 5)
     await Promise.all(changed.slice(i, i + 5).map((p) => prisma.employee.update({ where: { personnelId: p.id }, data: mirrorData(p, now) })));
+  await mirrorPlacements(rows.filter((p) => Array.isArray(p.placements)), now);
   return rows.length;
+}
+
+export const placementData = (pl) => ({
+  id: pl.id,
+  hseSiteId: pl.siteId,
+  siteCode: pl.siteCode,
+  siteIsHo: Boolean(pl.siteIsHo),
+  position: pl.position,
+  startDate: new Date(pl.startDate),
+  endDate: day(pl.endDate),
+  status: pl.status,
+});
+
+/**
+ * Salinan riwayat penempatan ditulis ulang utuh per karyawan (satu transaksi), lalu penugasan proyek disesuaikan.
+ * placementsSyncedAt baru diisi bila penulisan berhasil, sehingga baris yang gagal diulang pada sinkronisasi berikutnya.
+ */
+async function mirrorPlacements(rows, now) {
+  if (!rows.length) return;
+  const ids = await prisma.employee.findMany({ where: { personnelId: { in: rows.map((p) => p.id) } }, select: { id: true, personnelId: true } });
+  const byPersonnel = new Map(ids.map((e) => [e.personnelId, e.id]));
+  const work = rows.filter((p) => byPersonnel.has(p.id));
+  for (let i = 0; i < work.length; i += 5)
+    await Promise.all(
+      work.slice(i, i + 5).map((p) => {
+        const employeeId = byPersonnel.get(p.id);
+        return prisma.$transaction([
+          prisma.employeePlacement.deleteMany({ where: { employeeId } }),
+          prisma.employeePlacement.createMany({ data: p.placements.map((pl) => ({ ...placementData(pl), employeeId })) }),
+          prisma.employee.update({ where: { id: employeeId }, data: { placementsSyncedAt: now } }),
+        ]);
+      }),
+    );
+  await reconcileAssignments({ id: { in: work.map((p) => byPersonnel.get(p.id)) } });
 }
 
 /** Perbarui salinan untuk personel tertentu (dipanggil tepat setelah menulis ke E-HSE). */
@@ -82,11 +120,30 @@ export async function refreshEmployees(ids) {
 
 let lastSync = 0;
 let running = null;
+// E-HSE versi lama tidak mengirim riwayat penempatan: lewati pengisian awal sampai instance dimulai ulang.
+let placementsUnsupported = false;
+
+/** Pengisian awal riwayat penempatan untuk salinan yang belum pernah menerimanya (umpan berkursor tidak mengirim ulang baris lama). */
+async function backfillPlacements() {
+  if (placementsUnsupported) return 0;
+  const pending = await prisma.employee.findMany({ where: { personnelId: { not: null }, placementsSyncedAt: null }, select: { personnelId: true }, take: 1000 });
+  let filled = 0;
+  for (let i = 0; i < pending.length; i += 100) {
+    const { rows } = await hseFetch(SYSTEM_ACTOR, "/personnel/changes?" + new URLSearchParams({ ids: pending.slice(i, i + 100).map((e) => e.personnelId).join(",") }));
+    if (rows.some((p) => !Array.isArray(p.placements))) {
+      placementsUnsupported = true;
+      break;
+    }
+    filled += await upsertRows(rows);
+  }
+  return filled;
+}
 
 /** Tarik semua perubahan sejak kursor terakhir (updatedAt E-HSE terbesar yang sudah diterima). */
 export function syncEmployees() {
   running ??= (async () => {
     try {
+      await backfillPlacements();
       const max = await prisma.employee.aggregate({ _max: { hseUpdatedAt: true } });
       let cursor = max._max.hseUpdatedAt ? { since: new Date(max._max.hseUpdatedAt).toISOString() } : {};
       let synced = 0;
@@ -220,4 +277,10 @@ export async function erpAssignments(personnelId) {
     },
   });
   return employee ?? { id: null, syncedAt: null, projects: [] };
+}
+
+/** Daftar site E-HSE (data non-sensitif) untuk menautkan proyek ERP ke site. */
+export async function hseSites() {
+  const { rows } = await hseFetch(SYSTEM_ACTOR, "/sites");
+  return rows;
 }
