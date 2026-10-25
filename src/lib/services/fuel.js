@@ -3,6 +3,7 @@ import { object, text, number, money, choice, array, ensure, InputError } from "
 import { transaction, audit, nextNumber } from "../transactions.js";
 import { decodeAttendanceQr } from "../attendance-qr.js";
 import { scanRoster } from "./attendance-scan.js";
+import { HSE_FLAG_LABELS, PERMIT_UNIT_TYPES, hseFlags } from "../hse-flags.js";
 import {
   COUNT_DUE_DAYS,
   DRUM_LITERS,
@@ -29,7 +30,7 @@ const vehicleCard = { id: true, code: true, name: true, type: true, plateNumber:
 async function siteOf(user, db = prisma) {
   const account = await db.user.findUnique({
     where: { id: user.id },
-    select: { siteProject: { select: { id: true, code: true, name: true, status: true } } },
+    select: { siteProject: { select: { id: true, code: true, name: true, status: true, hseSiteId: true } } },
   });
   const site = account?.siteProject;
   ensure(site, "Akun ini belum ditautkan ke site. Minta admin mengatur site di menu Pengguna.", 409);
@@ -167,10 +168,23 @@ async function issueFuel(item, at, site, user, now) {
   if (item.takerCode) {
     const employeeNo = decodeAttendanceQr(text(item.takerCode, "Kartu pengambil", 100));
     ensure(employeeNo, "Kartu pengambil tidak sah. Gunakan kartu QR absensi resmi.", 422);
-    employee = await prisma.employee.findUnique({ where: { employeeNo }, select: { id: true, name: true, nip: true, isActive: true } });
+    employee = await prisma.employee.findUnique({
+      where: { employeeNo },
+      select: { id: true, name: true, nip: true, isActive: true, mcuResult: true, mcuValidUntil: true, hseHealthSyncedAt: true, permits: true },
+    });
     ensure(employee, "Karyawan pemilik kartu tidak ditemukan.", 404);
     ensure(employee.isActive, `${employee.name} tidak lagi aktif.`, 409);
   } else takerName = text(item.takerName, "Nama pengambil", 120);
+  // MCU tidak berlaku / SIMPER kedaluwarsa tidak menolak pengambilan (ada kasus tertentu); catatan ditandai untuk Logistik/HSE.
+  const flags = employee?.hseHealthSyncedAt
+    ? hseFlags({
+        mcu: employee.mcuResult || employee.mcuValidUntil ? { result: employee.mcuResult, validUntil: employee.mcuValidUntil } : null,
+        permits: employee.permits,
+        at,
+        needsPermit: PERMIT_UNIT_TYPES.includes(vehicle.type),
+        siteId: site.hseSiteId,
+      })
+    : [];
 
   let photo = null;
   if (item.photo != null) {
@@ -210,12 +224,13 @@ async function issueFuel(item, at, site, user, now) {
         method,
         employeeId: employee?.id ?? null,
         takerName,
+        hseFlags: flags,
         receivedAt: now,
         ...(photo ? { photo: { create: { data: photo } } } : {}),
       },
     });
     await audit(tx, user, "FUEL", "ISSUE", log.id, null, { ...log, photo: Boolean(photo) });
-    return { vehicle: vehicle.name, taker: employee?.name ?? takerName };
+    return { vehicle: vehicle.name, taker: employee?.name ?? takerName, flags };
   });
 }
 
@@ -404,7 +419,7 @@ export async function fuelOverview(now = new Date()) {
       orderBy: { date: "desc" },
       select: {
         id: true, projectId: true, date: true, receivedAt: true, liters: true, method: true, meterValue: true, runHours: true,
-        takerName: true, notes: true, voidedAt: true, voidReason: true, totalCost: true,
+        takerName: true, notes: true, voidedAt: true, voidReason: true, totalCost: true, hseFlags: true,
         vehicle: { select: vehicleCard }, employee: { select: { name: true, nip: true } }, user: { select: { name: true } },
         photo: { select: { fuelLogId: true } },
       },
@@ -483,6 +498,9 @@ export async function fuelOverview(now = new Date()) {
       flag("medium", "LARGE_ISSUE", i.projectId, i.date, `Pengambilan besar: ${i.liters} L`, `${i.vehicle.name} · pengambil ${i.employee?.name ?? i.takerName} · ${FUEL_METHODS[i.method]}`, i.id);
     if (!i.employee)
       flag("info", "NO_CARD", i.projectId, i.date, "Pengambil tanpa kartu", `${i.takerName} · ${i.liters} L untuk ${i.vehicle.name}`, i.id);
+    if (i.hseFlags?.length)
+      flag("medium", "HSE_TAKER", i.projectId, i.date, `Pengambil: ${i.hseFlags.map((f) => HSE_FLAG_LABELS[f] ?? f).join(", ")}`,
+        `${i.employee?.name ?? i.takerName} · ${i.liters} L untuk ${i.vehicle.name}. Tetap tercatat; tindak lanjuti dengan HSE.`, i.id);
   }
   const order = { high: 0, medium: 1, info: 2 };
   anomalies.sort((a, b) => order[a.severity] - order[b.severity] || new Date(b.at) - new Date(a.at));

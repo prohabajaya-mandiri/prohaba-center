@@ -5,6 +5,7 @@ import { signOut } from "next-auth/react";
 import { useDialog } from "@/components/DialogProvider";
 import CameraScanner from "@/components/field/CameraScanner";
 import { feedback, newId, parse, readRaw, useOfflinePage, useScannerKeys, useStored, useWakeLock, writeJson } from "@/components/field/offline";
+import { fieldHseNote } from "@/lib/hse-flags";
 import {
   AlertTriangle,
   Camera,
@@ -106,7 +107,7 @@ async function flush(key) {
           // Foto tidak perlu disimpan lagi di HP setelah diproses server.
           const payload = { ...i.payload };
           delete payload.photo;
-          return { ...i, status: r.status, message: r.message ?? null, number: r.number ?? null, payload, syncedAt: Date.now() };
+          return { ...i, status: r.status, message: r.message ?? null, number: r.number ?? null, flags: r.flags ?? [], payload, syncedAt: Date.now() };
         }),
       );
     }
@@ -379,6 +380,7 @@ function Home({ stock, shipments, openRequest, items, banner, bannerItem, sync, 
               <span className="absen-row-main">
                 <strong>{KIND_LABEL[i.kind]} · {i.label?.title}</strong>
                 <span>{i.status === "rejected" ? i.message : [i.label?.detail, i.status === "pending" && "belum terkirim", numberOf(i)].filter(Boolean).join(" · ")}</span>
+                {i.status === "ok" && fieldHseNote(i.flags) && <span className="absen-hse">{fieldHseNote(i.flags)}</span>}
               </span>
               <StatusIcon status={i.status} />
             </li>
@@ -807,13 +809,20 @@ function EntryBanner({ item, sync }) {
         <div><strong>{title}</strong><span>{item.message}</span></div>
       </div>
     );
-  if (item.status === "ok")
+  if (item.status === "ok") {
+    // Pengambil dengan MCU/SIMPER tidak berlaku tetap tercatat; petugas cukup diberi tahu.
+    const note = fieldHseNote(item.flags);
     return (
-      <div className="absen-banner ok" role="status">
+      <div className={"absen-banner ok" + (note ? " hse" : "")} role="status">
         <CheckCircle2 aria-hidden />
-        <div><strong>{title}</strong><span>Tercatat {timeOf(item.at)}{numberOf(item) ? ` · ${numberOf(item)}` : ""}{item.label?.detail ? ` · ${item.label.detail}` : ""}</span></div>
+        <div>
+          <strong>{title}</strong>
+          <span>Tercatat {timeOf(item.at)}{numberOf(item) ? ` · ${numberOf(item)}` : ""}{item.label?.detail ? ` · ${item.label.detail}` : ""}</span>
+          {note && <span className="absen-hse">{note}</span>}
+        </div>
       </div>
     );
+  }
   const offline = sync !== "ok";
   return (
     <div className={"absen-banner " + (offline ? "saved" : "sending")} role="status">

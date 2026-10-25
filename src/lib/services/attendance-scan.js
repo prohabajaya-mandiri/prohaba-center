@@ -11,6 +11,7 @@ import {
   resolveScanTime,
 } from "../attendance-scan.js";
 import { STATUS } from "../ui-labels.js";
+import { hseFlags } from "../hse-flags.js";
 
 const TIMEZONES = SCAN_TIMEZONES.map(([tz]) => tz);
 const CLIENT_ID = /^[A-Za-z0-9-]{8,64}$/;
@@ -47,11 +48,11 @@ export async function syncScans(body, user) {
 async function processScan(item, sentAt, user, now) {
   const stored = await prisma.attendanceScan.findUnique({
     where: { clientId: item.clientId },
-    select: { scannedAt: true, attendanceId: true, employee: { select: employeeCard }, project: { select: { name: true } } },
+    select: { scannedAt: true, attendanceId: true, hseFlags: true, employee: { select: employeeCard }, project: { select: { name: true } } },
   });
   if (stored) {
     const count = await prisma.attendanceScan.count({ where: { attendanceId: stored.attendanceId } });
-    return { status: "ok", employee: stored.employee, projectName: stored.project.name, scannedAt: stored.scannedAt, count };
+    return { status: "ok", employee: stored.employee, projectName: stored.project.name, scannedAt: stored.scannedAt, count, flags: stored.hseFlags ?? [] };
   }
 
   const code = text(item.code, "Kode QR", 100),
@@ -70,6 +71,9 @@ async function processScan(item, sentAt, user, now) {
     select: {
       ...employeeCard,
       isActive: true,
+      mcuResult: true,
+      mcuValidUntil: true,
+      hseHealthSyncedAt: true,
       projects: {
         where: {
           startDate: { lte: date },
@@ -82,8 +86,12 @@ async function processScan(item, sentAt, user, now) {
     },
   });
   ensure(found, "Karyawan dengan kartu ini tidak ditemukan.", 404);
-  const { projects: assignments, isActive, ...employee } = found;
+  const { projects: assignments, isActive, mcuResult, mcuValidUntil, hseHealthSyncedAt, ...employee } = found;
   ensure(isActive, `${employee.name} tidak lagi aktif.`, 409);
+  // MCU tidak berlaku tidak menolak scan (ada kasus tertentu di lapangan); scan ditandai untuk HRD/HSE.
+  const flags = hseHealthSyncedAt
+    ? hseFlags({ mcu: mcuResult || mcuValidUntil ? { result: mcuResult, validUntil: mcuValidUntil } : null, at })
+    : [];
 
   return transaction(async (tx) => {
     let attendance = await tx.attendance.findUnique({
@@ -108,7 +116,7 @@ async function processScan(item, sentAt, user, now) {
       // Antrean offline bisa tiba tidak berurutan, jadi bandingkan dengan scan terdekat.
       const near = attendance.scans.find((s) => Math.abs(s.scannedAt - at) < DUPLICATE_WINDOW_MS);
       if (near)
-        return { status: "duplicate", employee, projectName, scannedAt: near.scannedAt, count };
+        return { status: "duplicate", employee, projectName, scannedAt: near.scannedAt, count, flags };
     } else {
       // Proyek otomatis dari penugasan; bila lebih dari satu, penugasan terbaru dipakai.
       ensure(assignments.length, `${employee.name} tidak punya penugasan proyek aktif pada ${day}.`, 409);
@@ -141,9 +149,10 @@ async function processScan(item, sentAt, user, now) {
         timeZone,
         method,
         scannedBy: user.id,
+        hseFlags: flags,
       },
     });
-    return { status: "ok", employee, projectName, scannedAt: at, count: count + 1 };
+    return { status: "ok", employee, projectName, scannedAt: at, count: count + 1, flags };
   });
 }
 
@@ -173,6 +182,7 @@ export async function scanRecap(day, projectId) {
       receivedAt: true,
       timeZone: true,
       method: true,
+      hseFlags: true,
       scanUser: { select: { name: true } },
       employee: { select: { id: true, name: true, nip: true, position: true } },
       project: { select: { id: true, name: true } },
@@ -188,6 +198,7 @@ export async function scanRecap(day, projectId) {
       timeZone: s.timeZone,
       method: s.method,
       by: s.scanUser.name,
+      flags: s.hseFlags ?? [],
       // Diterima server jauh setelah di-scan = dikirim dari antrean offline HP PIC.
       receivedAt: s.receivedAt - s.scannedAt > OFFLINE_FLAG_MS ? s.receivedAt.toISOString() : null,
     });
