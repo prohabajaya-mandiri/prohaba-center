@@ -1288,6 +1288,9 @@ details.card[open] > summary::after { transform: rotate(-135deg) translateY(-3px
 .absen-banner.sending > svg { color: var(--gray-400); }
 .absen-banner.error { border-color: var(--red-500); background: var(--red-50); }
 .absen-banner.error > svg, .absen-banner.error span { color: var(--red-600); }
+/* Tercatat, tetapi ada catatan HSE (MCU/SIMPER tidak berlaku): tidak memblokir, hanya menarik perhatian. */
+.absen-banner.ok.hse { border-color: var(--yellow-500); }
+.absen-banner .absen-hse, .absen-row .absen-hse { color: var(--yellow-700); font-weight: 600; }
 .absen-today { flex: 1; padding: 0 16px 16px; padding-bottom: max(16px, env(safe-area-inset-bottom)); }
 .absen-today-head { display: flex; justify-content: space-between; align-items: baseline; gap: 12px; padding: 4px 0 8px; }
 .absen-today-head strong { font-size: 15px; color: var(--gray-900); }

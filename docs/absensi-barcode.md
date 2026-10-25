@@ -24,6 +24,13 @@ jadi langsung terpakai di rekap SDM dan payroll.
 - Ditolak bila: kartu tidak sah, karyawan nonaktif, tidak punya penugasan aktif pada tanggal itu, tercatat izin/sakit/libur,
   atau payroll proyek periode tersebut sudah dibuat. Alasan penolakan tampil merah di daftar scan HP PIC.
 
+## Tanda HSE (MCU)
+
+Karyawan dengan MCU **UNFIT** atau MCU **kedaluwarsa** (data E-HSE) **tetap bisa absen**, karena ada kasus tertentu
+di lapangan. Scan-nya ditandai: HP PIC menampilkan "Catatan HSE: MCU tidak berlaku" (tanpa membedakan UNFIT/kedaluwarsa),
+dan Rekap scan barcode menampilkan lencana rinci untuk HRD/HSE. Status dihitung pada tanggal scan dari salinan MCU terakhir
+(`Employee.mcuResult`, `mcuValidUntil`) dan disimpan di `AttendanceScan.hseFlags`. Aturan: `src/lib/hse-flags.js`.
+
 ## Offline
 
 - Setiap scan masuk antrean di HP (localStorage, per akun PIC) dengan id unik, lalu dikirim ke `POST /api/absen/sync`.

@@ -29,6 +29,7 @@ import {
 } from "@/lib/attendance-scan";
 import CameraScanner from "@/components/field/CameraScanner";
 import { feedback, newId, parse, readRaw, useOfflinePage, useScannerKeys, useStored, useWakeLock, writeJson } from "@/components/field/offline";
+import { fieldHseNote } from "@/lib/hse-flags";
 
 // Web absensi lapangan untuk HP PIC. Setiap scan masuk antrean di HP (localStorage)
 // lalu dikirim ke server; tanpa sinyal, antrean tetap tersimpan dan dikirim begitu online.
@@ -95,6 +96,7 @@ async function flush(key) {
             projectName: r.projectName ?? null,
             count: r.count ?? null,
             recordedAt: r.scannedAt ?? null,
+            flags: r.flags ?? [],
           };
         }),
       );
@@ -279,6 +281,7 @@ export default function AbsenClient({ user }) {
               <span className="absen-row-main">
                 <strong>{i.name ?? "Kartu terbaca"}</strong>
                 <span>{rowDetail(i)}</span>
+                <HseNote item={i} />
               </span>
               <StatusIcon status={i.status} />
             </li>
@@ -297,6 +300,12 @@ function rowDetail(i) {
   if (i.status === "pending") return [nipLabel(i), "belum terkirim"].filter(Boolean).join(" · ");
   if (i.status === "duplicate") return [nipLabel(i), "scan ganda, tidak dihitung"].filter(Boolean).join(" · ");
   return [nipLabel(i), i.projectName, i.count && `scan ke-${i.count}`].filter(Boolean).join(" · ");
+}
+
+/** Catatan HSE di bawah baris/banner scan yang tercatat (MCU tidak berlaku): scan tetap dihitung. */
+function HseNote({ item }) {
+  const note = item.status === "ok" ? fieldHseNote(item.flags) : null;
+  return note ? <span className="absen-hse">{note}</span> : null;
 }
 
 function StatusIcon({ status }) {
@@ -361,11 +370,12 @@ function ScanBanner({ banner, item, sync }) {
     );
   if (item.status === "ok")
     return (
-      <div className="absen-banner ok" role="status">
+      <div className={"absen-banner ok" + (item.flags?.length ? " hse" : "")} role="status">
         <CheckCircle2 aria-hidden />
         <div>
           <strong>{who}</strong>
           <span>Tercatat {time}{item.projectName ? ` · ${item.projectName}` : ""} · scan ke-{item.count}</span>
+          <HseNote item={item} />
         </div>
       </div>
     );

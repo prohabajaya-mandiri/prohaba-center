@@ -3,6 +3,7 @@ import { ScanLine } from "lucide-react";
 import { EmptyRow } from "@/components/ui";
 import { fmtDate } from "@/lib/ui-labels";
 import { MIN_SCANS, localTime, timeZoneLabel } from "@/lib/attendance-scan";
+import { HSE_FLAG_LABELS } from "@/lib/hse-flags";
 
 export default function ScanRecap({ rows, missing, day, projectId, projects }) {
   const complete = rows.filter((r) => r.scans.length >= MIN_SCANS).length;
@@ -78,6 +79,10 @@ export default function ScanRecap({ rows, missing, day, projectId, projects }) {
                     {r.scans.length >= MIN_SCANS
                       ? <span className="badge badge-success">Lengkap</span>
                       : <span className="badge badge-warning">Kurang {MIN_SCANS - r.scans.length} scan</span>}
+                    {/* Scan tetap dihitung; tanda HSE untuk ditindaklanjuti bersama HSE. */}
+                    {[...new Set(r.scans.flatMap((s) => s.flags))].map((f) => (
+                      <span key={f} className="badge badge-danger" style={{ marginLeft: 6 }} title="Tercatat saat scan; data dari E-HSE">{HSE_FLAG_LABELS[f] ?? f}</span>
+                    ))}
                   </td>
                 </tr>
               ))}

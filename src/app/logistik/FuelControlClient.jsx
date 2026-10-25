@@ -460,7 +460,7 @@ function Anomalies({ anomalies }) {
       <div className="card">
         <div className="card-header">
           <div className="card-title">Anomali BBM drum</div>
-          <span className="card-subtitle">Kiriman kurang, selisih opname, meter mundur, pemakaian boros, pengambilan besar & tanpa kartu (90 hari)</span>
+          <span className="card-subtitle">Kiriman kurang, selisih opname, meter mundur, pemakaian boros, pengambilan besar & tanpa kartu, pengambil dengan MCU/SIMPER tidak berlaku (90 hari)</span>
         </div>
         <div className="table-wrapper">
           <table>

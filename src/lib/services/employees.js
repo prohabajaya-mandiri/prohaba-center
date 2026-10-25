@@ -72,7 +72,7 @@ async function upsertRows(rows) {
   const changed = rows.filter((p) => existing.has(p.id));
   for (let i = 0; i < changed.length; i += 5)
     await Promise.all(changed.slice(i, i + 5).map((p) => prisma.employee.update({ where: { personnelId: p.id }, data: mirrorData(p, now) })));
-  await mirrorPlacements(rows.filter((p) => Array.isArray(p.placements)), now);
+  await mirrorDetails(rows.filter((p) => Array.isArray(p.placements)), now);
   return rows.length;
 }
 
@@ -87,11 +87,32 @@ export const placementData = (pl) => ({
   status: pl.status,
 });
 
+export const permitData = (pm) => ({
+  id: pm.id,
+  hseSiteId: pm.siteId,
+  permitType: pm.permitType,
+  startDate: new Date(pm.startDate),
+  endDate: new Date(pm.endDate),
+  revokedAt: day(pm.revokedAt),
+});
+
+/** Status MCU & permit dari umpan; umpan versi lama tanpa field ini tidak menyentuh salinan yang ada. */
+const healthWrites = (p, employeeId) =>
+  Array.isArray(p.permits)
+    ? [
+        prisma.employeePermit.deleteMany({ where: { employeeId } }),
+        prisma.employeePermit.createMany({ data: p.permits.map((pm) => ({ ...permitData(pm), employeeId })) }),
+      ]
+    : [];
+const healthData = (p, now) =>
+  Array.isArray(p.permits) ? { mcuResult: p.mcu?.result ?? null, mcuValidUntil: day(p.mcu?.validUntil), hseHealthSyncedAt: now } : {};
+
 /**
- * Salinan riwayat penempatan ditulis ulang utuh per karyawan (satu transaksi), lalu penugasan proyek disesuaikan.
- * placementsSyncedAt baru diisi bila penulisan berhasil, sehingga baris yang gagal diulang pada sinkronisasi berikutnya.
+ * Salinan riwayat penempatan (dan MCU/permit bila dikirim) ditulis ulang utuh per karyawan (satu transaksi),
+ * lalu penugasan proyek disesuaikan. Penanda *SyncedAt baru diisi bila penulisan berhasil, sehingga baris
+ * yang gagal diulang pada sinkronisasi berikutnya.
  */
-async function mirrorPlacements(rows, now) {
+async function mirrorDetails(rows, now) {
   if (!rows.length) return;
   const ids = await prisma.employee.findMany({ where: { personnelId: { in: rows.map((p) => p.id) } }, select: { id: true, personnelId: true } });
   const byPersonnel = new Map(ids.map((e) => [e.personnelId, e.id]));
@@ -103,7 +124,8 @@ async function mirrorPlacements(rows, now) {
         return prisma.$transaction([
           prisma.employeePlacement.deleteMany({ where: { employeeId } }),
           prisma.employeePlacement.createMany({ data: p.placements.map((pl) => ({ ...placementData(pl), employeeId })) }),
-          prisma.employee.update({ where: { id: employeeId }, data: { placementsSyncedAt: now } }),
+          ...healthWrites(p, employeeId),
+          prisma.employee.update({ where: { id: employeeId }, data: { placementsSyncedAt: now, ...healthData(p, now) } }),
         ]);
       }),
     );
@@ -120,18 +142,22 @@ export async function refreshEmployees(ids) {
 
 let lastSync = 0;
 let running = null;
-// E-HSE versi lama tidak mengirim riwayat penempatan: lewati pengisian awal sampai instance dimulai ulang.
-let placementsUnsupported = false;
+// E-HSE versi lama tidak mengirim riwayat penempatan/MCU/permit: lewati pengisian awal sampai instance dimulai ulang.
+let feedOutdated = false;
 
-/** Pengisian awal riwayat penempatan untuk salinan yang belum pernah menerimanya (umpan berkursor tidak mengirim ulang baris lama). */
-async function backfillPlacements() {
-  if (placementsUnsupported) return 0;
-  const pending = await prisma.employee.findMany({ where: { personnelId: { not: null }, placementsSyncedAt: null }, select: { personnelId: true }, take: 1000 });
+/** Pengisian awal penempatan, MCU dan permit untuk salinan yang belum pernah menerimanya (umpan berkursor tidak mengirim ulang baris lama). */
+async function backfillDetails() {
+  if (feedOutdated) return 0;
+  const pending = await prisma.employee.findMany({
+    where: { personnelId: { not: null }, OR: [{ placementsSyncedAt: null }, { hseHealthSyncedAt: null }] },
+    select: { personnelId: true },
+    take: 1000,
+  });
   let filled = 0;
   for (let i = 0; i < pending.length; i += 100) {
     const { rows } = await hseFetch(SYSTEM_ACTOR, "/personnel/changes?" + new URLSearchParams({ ids: pending.slice(i, i + 100).map((e) => e.personnelId).join(",") }));
-    if (rows.some((p) => !Array.isArray(p.placements))) {
-      placementsUnsupported = true;
+    if (rows.some((p) => !Array.isArray(p.placements) || !Array.isArray(p.permits))) {
+      feedOutdated = true;
       break;
     }
     filled += await upsertRows(rows);
@@ -143,7 +169,7 @@ async function backfillPlacements() {
 export function syncEmployees() {
   running ??= (async () => {
     try {
-      await backfillPlacements();
+      await backfillDetails();
       const max = await prisma.employee.aggregate({ _max: { hseUpdatedAt: true } });
       let cursor = max._max.hseUpdatedAt ? { since: new Date(max._max.hseUpdatedAt).toISOString() } : {};
       let synced = 0;
