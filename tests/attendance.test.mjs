@@ -1,7 +1,7 @@
 import test from "node:test";
 import assert from "node:assert/strict";
 import { encodeAttendanceQr, decodeAttendanceQr } from "../src/lib/attendance-qr.js";
-import { localDate, localTime, resolveScanTime } from "../src/lib/attendance-scan.js";
+import { employeeTag, localDate, localTime, resolveScanTime } from "../src/lib/attendance-scan.js";
 import { canAccess, homePath, KIOSK_ROLE } from "../src/lib/access.js";
 
 test("attendance QR is signed and rejects forged or altered codes", () => {
@@ -46,4 +46,11 @@ test("offline scan time is corrected for a wrong phone clock and bounded", () =>
   assert.match(resolveScanTime("2026-10-18T10:00:00Z", "2026-10-22T10:00:00Z", now).error, /3 hari/);
   assert.match(resolveScanTime("bukan-tanggal", "2026-10-22T10:00:00Z", now).error, /tidak valid/);
   assert.match(resolveScanTime(undefined, "2026-10-22T10:00:00Z", now).error, /tidak valid/);
+});
+
+test("attendance card shows NIP when present, otherwise the employee category", () => {
+  assert.equal(employeeTag({ nip: "2024001", category: "STAFF" }), "NIP 2024001");
+  assert.equal(employeeTag({ nip: null, category: "HARIAN_KANTOR" }), "Harian Kantor");
+  assert.equal(employeeTag({ nip: "", category: "MANPOWER" }), "Manpower");
+  assert.equal(employeeTag({ nip: null, category: null }), null);
 });
