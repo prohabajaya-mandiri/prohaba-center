@@ -105,6 +105,11 @@ export async function approve(body, user) {
     return result;
   });
 }
+const ATTENDANCE_STATUSES = ["HADIR", "TIDAK_HADIR", "IZIN", "SAKIT", "LIBUR"];
+// Kehadiran harian dicatat lewat scan kartu QR. Hadir manual dan koreksi baris (lembur/status)
+// hanya oleh HRD, wajib beralasan, dan tercatat di audit log agar barcode tetap menjadi bukti utama.
+export const ATTENDANCE_HRD_ROLES = ["HRD"];
+
 export async function attendance(body, user) {
   object(body, [
     "date",
@@ -118,13 +123,7 @@ export async function attendance(body, user) {
     date: date(body.date),
     projectId: text(body.projectId, "Proyek"),
     employeeId: text(body.employeeId, "Pegawai"),
-    status: choice(body.status, [
-      "HADIR",
-      "TIDAK_HADIR",
-      "IZIN",
-      "SAKIT",
-      "LIBUR",
-    ]),
+    status: choice(body.status, ATTENDANCE_STATUSES),
     overtime: number(body.overtime ?? 0, "Lembur", 0, 24),
     notes: text(body.notes, "Catatan", 2000, true),
   };
@@ -132,6 +131,14 @@ export async function attendance(body, user) {
     data.status === "HADIR" || data.overtime === 0,
     "Lembur hanya untuk kehadiran.",
   );
+  if (data.status === "HADIR") {
+    ensure(
+      ATTENDANCE_HRD_ROLES.includes(user.role),
+      "Kehadiran dicatat lewat scan kartu QR. Hadir manual hanya dapat dicatat HRD.",
+      403,
+    );
+    ensure(data.notes, "Alasan hadir manual wajib diisi.");
+  }
   return transaction(async (tx) => {
     // Satu karyawan bisa punya beberapa periode penugasan di proyek yang sama; cari yang mencakup tanggal.
     const assignment = await tx.employeeProject.findFirst({
@@ -156,10 +163,48 @@ export async function attendance(body, user) {
       },
     });
     ensure(!locked, "Absensi periode yang sudah dibuat payroll dikunci.", 409);
+    const existing = await tx.attendance.findUnique({
+      where: { employeeId_date: { employeeId: data.employeeId, date: data.date } },
+    });
+    ensure(!existing, "Absensi karyawan ini pada tanggal tersebut sudah ada. Gunakan tombol Ubah pada riwayat.", 409);
     const result = await tx.attendance.create({
       data: { ...data, enteredBy: user.id },
     });
     await audit(tx, user, "ATTENDANCE", "CREATE", result.id, null, result);
+    return result;
+  });
+}
+
+/** Koreksi baris absensi (status & lembur) oleh HRD dengan alasan, termasuk baris hasil scan. */
+export async function correctAttendance(id, body, user) {
+  ensure(ATTENDANCE_HRD_ROLES.includes(user.role), "Koreksi absensi hanya dapat dilakukan HRD.", 403);
+  object(body, ["status", "overtime", "reason"]);
+  const status = choice(body.status, ATTENDANCE_STATUSES),
+    overtime = number(body.overtime ?? 0, "Lembur", 0, 24),
+    reason = text(body.reason, "Alasan koreksi", 500);
+  ensure(status === "HADIR" || overtime === 0, "Lembur hanya untuk kehadiran.");
+  return transaction(async (tx) => {
+    const old = await tx.attendance.findUniqueOrThrow({ where: { id: text(id, "Absensi") } });
+    ensure(old.status !== status || old.overtime !== overtime, "Tidak ada perubahan status atau lembur.");
+    if (old.projectId) {
+      const locked = await tx.payroll.findUnique({
+        where: { projectId_period: { projectId: old.projectId, period: old.date.toISOString().slice(0, 7) } },
+      });
+      ensure(!locked, "Absensi periode yang sudah dibuat payroll dikunci.", 409);
+    }
+    const result = await tx.attendance.update({
+      where: { id: old.id },
+      data: { status, overtime, editedBy: user.id, editedAt: new Date(), editReason: reason },
+    });
+    await audit(
+      tx,
+      user,
+      "ATTENDANCE",
+      "UPDATE",
+      old.id,
+      { status: old.status, overtime: old.overtime },
+      { status, overtime, reason },
+    );
     return result;
   });
 }
