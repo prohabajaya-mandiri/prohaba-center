@@ -24,6 +24,7 @@ import {
   OFFLINE_WINDOW_MS,
   SCAN_TIMEZONES,
   localDate,
+  employeeTag,
   localTime,
   timeZoneLabel,
 } from "@/lib/attendance-scan";
@@ -92,6 +93,7 @@ async function flush(key) {
             message: r.message ?? null,
             name: r.employee?.name ?? i.name,
             nip: r.employee ? r.employee.nip : i.nip,
+            category: r.employee ? r.employee.category : i.category,
             position: r.employee?.position ?? i.position,
             projectName: r.projectName ?? null,
             count: r.count ?? null,
@@ -156,6 +158,7 @@ export default function AbsenClient({ user }) {
       status: "pending",
       employeeNo, // kode internal dari QR: hanya untuk mencocokkan, tidak ditampilkan
       nip: person?.nip ?? null,
+      category: person?.category ?? null,
       name: person?.name ?? null,
       position: person?.position ?? null,
     };
@@ -293,7 +296,7 @@ export default function AbsenClient({ user }) {
   );
 }
 
-const nipLabel = (i) => (i.nip ? `NIP ${i.nip}` : i.name ? "NIP belum diisi" : null);
+const nipLabel = (i) => employeeTag(i);
 
 function rowDetail(i) {
   if (i.status === "rejected") return i.message;
@@ -352,7 +355,7 @@ function ScanBanner({ banner, item, sync }) {
       </div>
     );
   if (!item) return null;
-  const who = item.name ? (item.nip ? `${item.name} · NIP ${item.nip}` : item.name) : "Kartu terbaca";
+  const who = item.name ? [item.name, employeeTag(item)].filter(Boolean).join(" · ") : "Kartu terbaca";
   const time = localTime(item.recordedAt ?? item.scannedAt, item.timeZone);
   if (banner.local === "duplicate" || item.status === "duplicate")
     return (

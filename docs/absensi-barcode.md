@@ -8,7 +8,7 @@ jadi langsung terpakai di rekap SDM dan payroll.
 
 | Langkah | Penjelasan |
 |---|---|
-| Cetak kartu | SDM → **Kartu QR absensi** (HRD/Top Management). Satu kartu ukuran ID (85,6 × 54 mm) per karyawan aktif **yang sudah ber-NIP**, filter per proyek atau nama/NIP. Karyawan tanpa NIP dihitung dan ditautkan ke Master Data untuk dilengkapi. |
+| Cetak kartu | SDM → **Kartu QR absensi** (HRD/Top Management). Satu kartu ukuran ID (85,6 × 54 mm) per karyawan aktif — **staff, harian kantor, dan manpower** — filter per proyek, kategori, atau nama/NIP. |
 | Akun PIC | Menu **Pengguna** → peran *PIC absensi lapangan* (`ABSENSI`), satu akun per PIC. Akun ini hanya bisa membuka `/absen`. HRD/PJO/Top Management juga bisa membuka `/absen`. |
 | Pasang di HP | PIC login di HP, buka `/absen` sekali saat ada sinyal, lalu (opsional) *Tambahkan ke layar utama*. Setelah itu web tetap terbuka walau tanpa sinyal. |
 | Scan | Kamera langsung aktif; arahkan ke kartu, scan berikutnya otomatis. Scanner Bluetooth/USB (mode keyboard) juga diterima. |
@@ -45,11 +45,12 @@ dan Rekap scan barcode menampilkan lencana rinci untuk HRD/HSE. Status dihitung 
   tanpa sinyal. Syaratnya PIC pernah membuka `/absen` sekali saat online setelah rilis.
 - Sesi login berlaku 8 jam. Bila habis, scan tetap tersimpan; PIC login ulang dan antrean terkirim.
 
-## NIP dan isi QR
+## Nama, NIP dan isi QR
 
-Kartu, layar scan dan rekap menampilkan **NIP** (`Employee.nip`, dari E-HSE); kode internal (`PJM-…`) tidak ditampilkan.
-QR berisi kode internal karena kode itu tetap dan unik, sedangkan NIP boleh kosong dan dapat diubah HRD. Akibatnya
-kartu tetap berlaku walau NIP diubah; cetak ulang bila NIP pada kartu perlu diperbarui.
+Kartu, layar scan dan rekap menampilkan **nama** karyawan, diikuti **NIP** bila ada (umumnya staff) atau kategorinya
+(*Harian Kantor*, *Manpower*) bila tanpa NIP; kode internal (`PJM-…`) tidak ditampilkan. QR berisi kode internal karena
+kode itu tetap dan unik — nama bisa sama dan NIP hanya dimiliki staff. Akibatnya kartu tetap berlaku walau nama atau
+NIP diperbaiki di Master Data; cetak ulang bila tulisan pada kartu perlu diperbarui.
 
 ## Keamanan kartu
 

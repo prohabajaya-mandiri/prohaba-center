@@ -47,6 +47,19 @@ export function localTime(at, timeZone) {
   return new Intl.DateTimeFormat('id-ID', { timeZone, hour: '2-digit', minute: '2-digit', hourCycle: 'h23' }).format(new Date(at)).replace('.', ':');
 }
 
+/** Kategori karyawan yang dicetakkan kartu absensi (E-HSE Personnel.category). */
+export const CARD_CATEGORIES = [
+  ['STAFF', 'Staff'],
+  ['HARIAN_KANTOR', 'Harian Kantor'],
+  ['MANPOWER', 'Manpower'],
+];
+
+/** Keterangan di bawah nama: NIP bila ada (staff), selain itu kategori — harian kantor & manpower umumnya tanpa NIP. */
+export function employeeTag(employee) {
+  if (employee?.nip) return `NIP ${employee.nip}`;
+  return CARD_CATEGORIES.find(([key]) => key === employee?.category)?.[1] ?? null;
+}
+
 export function timeZoneLabel(timeZone) {
   return SCAN_TIMEZONES.find(([tz]) => tz === timeZone)?.[1] ?? timeZone;
 }

@@ -2,7 +2,7 @@ import Link from "next/link";
 import { ScanLine } from "lucide-react";
 import { EmptyRow } from "@/components/ui";
 import { fmtDate } from "@/lib/ui-labels";
-import { MIN_SCANS, localTime, timeZoneLabel } from "@/lib/attendance-scan";
+import { MIN_SCANS, localTime, timeZoneLabel, employeeTag } from "@/lib/attendance-scan";
 import { HSE_FLAG_LABELS } from "@/lib/hse-flags";
 
 export default function ScanRecap({ rows, missing, day, projectId, projects }) {
@@ -57,7 +57,7 @@ export default function ScanRecap({ rows, missing, day, projectId, projects }) {
                 <tr key={r.id + r.projectName}>
                   <td>
                     <div className="cell-title">{r.name}</div>
-                    <div className="muted">{r.nip ? `NIP ${r.nip}` : "NIP belum diisi"} · {r.position}</div>
+                    <div className="muted">{[employeeTag(r), r.position].filter(Boolean).join(" · ")}</div>
                   </td>
                   <td>{r.projectName}</td>
                   <td>
@@ -101,7 +101,7 @@ export default function ScanRecap({ rows, missing, day, projectId, projects }) {
           <div className="card-body" style={{ display: "flex", flexWrap: "wrap", gap: 8 }}>
             {missing.map((e) => (
               <span key={e.id} className="chip" style={{ fontSize: 13.5, padding: "5px 12px" }}>
-                {e.name}<span style={{ color: "var(--gray-500)" }}> · {e.nip ? `NIP ${e.nip}` : "NIP belum diisi"}</span>
+                {e.name}{employeeTag(e) && <span style={{ color: "var(--gray-500)" }}> · {employeeTag(e)}</span>}
               </span>
             ))}
           </div>

@@ -123,14 +123,14 @@ async function BarcodeTab({ tab, query, user }) {
     content = <ScanRecap {...recap} day={day} projectId={projectId} projects={projects} />;
   } else {
     const q = typeof query?.q === "string" ? query.q.trim().slice(0, 100) : "";
-    let cards = [], withoutNip = 0, error = "";
+    let cards = [], category = "", error = "";
     try {
-      ({ cards, withoutNip } = await attendanceCards({ projectId, q }));
+      ({ cards, category } = await attendanceCards({ projectId, category: query?.category, q }));
     } catch (e) {
       if (!String(e.message).includes("ATTENDANCE_QR_SECRET")) throw e;
       error = e.message;
     }
-    content = <QrCards cards={cards} withoutNip={withoutNip} error={error} projectId={projectId} q={q} projects={projects} />;
+    content = <QrCards cards={cards} error={error} projectId={projectId} category={category} q={q} projects={projects} />;
   }
   return (
     <AppLayout title="HR & Absensi" subtitle={tabLabel("/hr", tab)} user={user}>
