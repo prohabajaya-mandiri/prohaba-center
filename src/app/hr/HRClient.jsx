@@ -176,7 +176,7 @@ export default function HRClient({
                   <td className="nowrap">{fmtDate(a.date)}</td>
                   <td>
                     <div className="cell-title">{a.employeeName}</div>
-                    <div className="muted">{a.nip ? `NIP ${a.nip}` : "NIP belum diisi"}</div>
+                    {a.nip && <div className="muted">NIP {a.nip}</div>}
                   </td>
                   <td>{a.projectName}</td>
                   <td><StatusBadge value={a.status} /></td>
