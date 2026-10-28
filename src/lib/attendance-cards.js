@@ -1,13 +1,15 @@
 import QRCode from "qrcode";
 import { prisma } from "./prisma.js";
 import { encodeAttendanceQr } from "./attendance-qr.js";
+import { CARD_CATEGORIES } from "./attendance-scan.js";
 
 /**
  * Kartu QR absensi untuk semua karyawan aktif (staff, harian kantor, manpower), opsional per proyek
  * penugasan, kategori, atau pencarian nama/NIP. Kartu menampilkan nama; QR berisi kode internal yang
  * tetap dan unik (nama bisa sama dan NIP hanya dimiliki staff), lalu ditandatangani.
  */
-export async function attendanceCards({ projectId, category, q }) {
+export async function attendanceCards({ projectId, category: requested, q }) {
+  const category = CARD_CATEGORIES.some(([key]) => key === requested) ? requested : "";
   const scope = {
     isActive: true,
     ...(projectId ? { projects: { some: { projectId, OR: [{ endDate: null }, { endDate: { gte: new Date() } }] } } } : {}),
@@ -32,5 +34,5 @@ export async function attendanceCards({ projectId, category, q }) {
       }),
     })),
   );
-  return cards;
+  return { cards, category };
 }

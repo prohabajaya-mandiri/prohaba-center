@@ -11,7 +11,7 @@ import { ensureFreshEmployees } from "@/lib/services/employees";
 import { currentTab, tabLabel } from "@/lib/module-tabs";
 import { scanRecap } from "@/lib/services/attendance-scan";
 import { attendanceCards } from "@/lib/attendance-cards";
-import { CARD_CATEGORIES, DEFAULT_TIMEZONE, localDate } from "@/lib/attendance-scan";
+import { DEFAULT_TIMEZONE, localDate } from "@/lib/attendance-scan";
 import ScanRecap from "./ScanRecap";
 import QrCards from "./QrCards";
 
@@ -107,10 +107,9 @@ async function BarcodeTab({ tab, query, user }) {
     content = <ScanRecap {...recap} day={day} projectId={projectId} projects={projects} />;
   } else {
     const q = typeof query?.q === "string" ? query.q.trim().slice(0, 100) : "";
-    const category = CARD_CATEGORIES.some(([key]) => key === query?.category) ? query.category : "";
-    let cards = [], error = "";
+    let cards = [], category = "", error = "";
     try {
-      cards = await attendanceCards({ projectId, category, q });
+      ({ cards, category } = await attendanceCards({ projectId, category: query?.category, q }));
     } catch (e) {
       if (!String(e.message).includes("ATTENDANCE_QR_SECRET")) throw e;
       error = e.message;
