@@ -500,6 +500,10 @@ model Employee {
   hseSiteId           String? // site penempatan aktif di E-HSE
   hseSiteIsHo         Boolean   @default(false)
   placementsSyncedAt  DateTime? // null = riwayat penempatan E-HSE belum pernah diterima
+  // MCU terakhir di E-HSE (hasil & masa berlaku saja, tanpa catatan medis) untuk tanda HSE absensi/BBM.
+  mcuResult           String? // PENDING | FIT | FOLLOW_UP | UNFIT; null = belum MCU
+  mcuValidUntil       DateTime?
+  hseHealthSyncedAt   DateTime? // null = data MCU/permit E-HSE belum pernah diterima
   // Kolom data lama (sebelum terintegrasi E-HSE). Dikosongkan setelah tertaut; jangan dipakai untuk data baru.
   nik                 String?   @unique // NIK utuh hanya disimpan terenkripsi di E-HSE
   department          String?
@@ -517,6 +521,7 @@ model Employee {
   payrollItems PayrollItem[]
   fuelTaken    FuelLog[]
   placements   EmployeePlacement[]
+  permits      EmployeePermit[]
 
   @@index([isActive, name])
   @@index([hseUpdatedAt])
@@ -539,6 +544,21 @@ model EmployeePlacement {
 
   @@index([employeeId, startDate])
   @@index([hseSiteId, status])
+}
+
+// Salinan permit E-HSE (SIMPER, KIMPER, ID tambang, dst.) tanpa nomor. Ditulis ulang utuh setiap sinkronisasi personel.
+model EmployeePermit {
+  id         String    @id // Permit.id di E-HSE
+  employeeId String
+  hseSiteId  String
+  permitType String
+  startDate  DateTime
+  endDate    DateTime
+  revokedAt  DateTime?
+
+  employee Employee @relation(fields: [employeeId], references: [id], onDelete: Cascade)
+
+  @@index([employeeId, endDate])
 }
 
 model EmployeeProject {
@@ -607,6 +627,7 @@ model AttendanceScan {
   timeZone     String // zona waktu lokasi: Asia/Jakarta | Asia/Makassar | Asia/Jayapura
   method       String // SCANNER | KAMERA
   scannedBy    String
+  hseFlags     String[] @default([]) // tanda HSE saat scan (MCU_UNFIT | MCU_KEDALUWARSA); tidak memblokir
 
   attendance Attendance @relation(fields: [attendanceId], references: [id], onDelete: Cascade)
   employee   Employee   @relation(fields: [employeeId], references: [id])
@@ -774,6 +795,7 @@ model FuelLog {
   method     String? // FLOW_METER | TAKARAN | PERKIRAAN
   employeeId String? // pengambil (scan kartu QR absensi)
   takerName  String? // pengambil tanpa kartu (subkon/tamu)
+  hseFlags   String[]  @default([]) // tanda HSE pengambil saat itu (MCU / SIMPER_TIDAK_BERLAKU); tidak memblokir
   runHours   Float? // genset tanpa HM: lama nyala sejak isi terakhir
   receivedAt DateTime? // diterima server (beda jauh dari date = dikirim dari antrean offline)
   voidedAt   DateTime? // dibatalkan HO; tidak dihitung di stok

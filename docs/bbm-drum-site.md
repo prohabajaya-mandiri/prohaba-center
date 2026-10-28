@@ -40,8 +40,16 @@ masuk ke `FuelLog` yang sama dengan log BBM lama, jadi biaya BBM proyek dan moni
 | Satu pengambilan > 200 L | Sedang |
 | Opname terakhir lebih dari 7 hari lalu / belum pernah | Sedang |
 | Pengambil tanpa kartu QR (subkon/tamu) | Info |
+| Pengambil dengan MCU UNFIT/kedaluwarsa, atau tanpa SIMPER/KIMPER yang berlaku di site ini untuk alat berat/kendaraan | Sedang |
 
 Dashboard stok juga menampilkan pengambil terbanyak 30 hari dan porsi pengambilan bercara *perkiraan* per site.
+
+## Tanda HSE pengambil
+
+Pengambil dengan MCU tidak berlaku atau SIMPER/KIMPER kedaluwarsa **tetap bisa mengambil BBM** (ada kasus tertentu);
+catatannya ditandai (`FuelLog.hseFlags`), HP petugas menampilkan "Catatan HSE", dan Logistik melihatnya di Anomali BBM.
+SIMPER/KIMPER hanya diperiksa untuk unit alat berat dan kendaraan, dan harus berlaku pada tanggal pengambilan untuk
+site E-HSE proyek ini (SIMPER tambang berlaku per site). Data dari E-HSE; aturan di `src/lib/hse-flags.js`.
 
 ## Validasi saat mencatat
 
