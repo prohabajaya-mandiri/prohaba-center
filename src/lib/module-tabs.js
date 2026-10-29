@@ -44,6 +44,13 @@ export const MODULE_TABS = {
       ['monitoring', 'Monitoring per kendaraan'],
     ],
   },
+  '/inventaris': {
+    param: 'tab',
+    items: [
+      ['daftar', 'Daftar aset'],
+      ['import', 'Import register', ['TOP_MANAGEMENT', 'LOGISTIK']],
+    ],
+  },
   '/finance': {
     param: 'tab',
     items: [

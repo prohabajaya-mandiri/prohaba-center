@@ -9,7 +9,7 @@ import {
   LayoutDashboard, Building2, LineChart, Ruler,
   Wrench, Package, ShoppingCart, ShoppingBag,
   Landmark, Banknote, Users, CreditCard, UserCog,
-  Database, History, LogOut, Truck, X, ChevronDown,
+  Database, History, LogOut, Truck, X, ChevronDown, Boxes,
 } from 'lucide-react';
 import { useDialog } from './DialogProvider';
 import { ROLE_LABELS, initials } from '@/lib/ui-labels';
@@ -31,6 +31,7 @@ const NAV_ITEMS = [
       { href: '/workshop', label: 'Workshop', icon: Wrench, roles: ['TOP_MANAGEMENT', 'ENGINEERING', 'WORKSHOP', 'PJO'] },
       { href: '/material-request', label: 'Material Request', icon: Package, roles: ['TOP_MANAGEMENT', 'PJO', 'LOGISTIK'] },
       { href: '/logistik', label: 'Logistik & Kendaraan', icon: Truck, roles: ['TOP_MANAGEMENT', 'PJO', 'LOGISTIK'] },
+      { href: '/inventaris', label: 'Inventaris Aset', icon: Boxes, roles: ['TOP_MANAGEMENT', 'LOGISTIK', 'FINANCE', 'PJO'] },
       { href: '/procurement', label: 'Procurement & PO', icon: ShoppingCart, roles: ['TOP_MANAGEMENT', 'LOGISTIK', 'FINANCE'] },
       { href: '/site-purchase', label: 'Pembelian Site', icon: ShoppingBag, roles: ['TOP_MANAGEMENT', 'PJO', 'LOGISTIK', 'FINANCE'] },
     ],
