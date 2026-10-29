@@ -44,6 +44,7 @@ model User {
   fuelShipmentsRecv   FuelShipment[]    @relation("FuelShipmentReceiver")
   fuelStockCounts     FuelStockCount[]
   fuelRequests        FuelRequest[]
+  assetsCreated       Asset[]           @relation("AssetCreator")
 }
 
 // ─── PROJECT ──────────────────────────────────────────────────────────────────
@@ -521,6 +522,7 @@ model Employee {
   payrollItems PayrollItem[]
   fuelTaken    FuelLog[]
   placements   EmployeePlacement[]
+  assetsUsed   Asset[]
   permits      EmployeePermit[]
 
   @@index([isActive, name])
@@ -975,4 +977,81 @@ model SiteReceipt {
  sitePurchaseId String @id
  data Bytes
  fileName String
+}
+
+// ─── INVENTARIS ASET ──────────────────────────────────────────────────────────
+// Register aset PJM (docs/inventaris-aset.md). Satu nomor register = satu unit;
+// unit dari satu baris pembelian berbagi batchId.
+
+model AssetCategory {
+  code                     String  @id // HSE | BT | MPK | OF | VEH — bagian dari nomor register
+  name                     String
+  seqWidth                 Int     @default(4) // lebar nomor urut di nomor register (VEH: 3)
+  defaultDepreciationClass String?
+  isActive                 Boolean @default(true)
+
+  assets Asset[]
+}
+
+model DepreciationClass {
+  code String  @id // Gol 1 | Gol 2 | Gol 3 | Gol 4 | Tidak Permanen
+  rate Decimal @db.Decimal(6, 4) // tarif garis lurus per tahun
+
+  assets Asset[]
+}
+
+model AssetLocation {
+  id        String  @id @default(cuid())
+  code      String  @unique
+  name      String  @unique // sama dengan isian LOKASI di register Excel
+  type      String // HO | SITE | WORKSHOP | GUDANG | MESS
+  parentId  String?
+  hseSiteId String?
+  isActive  Boolean @default(true)
+
+  parent   AssetLocation?  @relation("AssetLocationTree", fields: [parentId], references: [id])
+  children AssetLocation[] @relation("AssetLocationTree")
+  assets   Asset[]
+}
+
+model Asset {
+  id                String    @id @default(cuid())
+  registerNo        String    @unique // PJM/MPK/XII/25/0085
+  batchId           String // satu baris pembelian
+  categoryCode      String
+  name              String
+  brandSpec         String?
+  identifier        String? // plat / S/N / P/N
+  quantity          Int       @default(1) // >1 hanya bila satu nomor untuk banyak unit
+  unit              String?
+  unitPrice         Decimal?  @db.Decimal(20, 2)
+  depreciationClass String?
+  depreciationRate  Decimal?  @db.Decimal(6, 4)
+  acquiredAt        DateTime?
+  costEstimated     Boolean   @default(false)
+  acquisitionSource String // PEMBELIAN | DATA_AWAL | HIBAH | BUATAN_WORKSHOP
+  ownership         String    @default("MILIK") // MILIK | TITIPAN | SEWA
+  ownerName         String?
+  status            String    @default("AKTIF") // AKTIF | DALAM_PERBAIKAN | TIDAK_DIPAKAI
+  condition         String // BAIK | PERLU_PERBAIKAN | RUSAK | HILANG
+  damagedYear       Int?
+  locationId        String
+  area              String?
+  endUserEmployeeId String?
+  notes             String?
+  createdById       String
+  createdAt         DateTime  @default(now())
+  updatedAt         DateTime  @updatedAt
+
+  category     AssetCategory      @relation(fields: [categoryCode], references: [code])
+  depreciation DepreciationClass? @relation(fields: [depreciationClass], references: [code])
+  location     AssetLocation      @relation(fields: [locationId], references: [id])
+  endUser      Employee?          @relation(fields: [endUserEmployeeId], references: [id])
+  createdBy    User               @relation("AssetCreator", fields: [createdById], references: [id])
+
+  @@index([batchId])
+  @@index([categoryCode, registerNo])
+  @@index([locationId, status])
+  @@index([endUserEmployeeId])
+  @@index([identifier])
 }
