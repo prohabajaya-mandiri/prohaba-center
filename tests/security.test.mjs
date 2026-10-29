@@ -42,6 +42,11 @@ test('every business API handler has an authorization check', () => {
   const walk = dir => readdirSync(dir, { withFileTypes: true }).flatMap(e => e.isDirectory() ? walk(dir + '/' + e.name) : [dir + '/' + e.name]);
   for (const file of walk('src/app/api').filter(f => f.endsWith('/route.js') && !f.includes('/auth/') && !f.includes('/seed/'))) {
     const source = readFileSync(file, 'utf8');
+    // Route yang dibaca E-HSE memakai tanda tangan HMAC, bukan sesi.
+    if (file.includes('/api/integration/')) {
+      assert.ok(/=\s*hseIntegrationApi\(/.test(source) && !/export (async )?function (GET|POST|PUT|DELETE)/.test(source), file);
+      continue;
+    }
     assert.ok(source.includes('authorizeApi(') || /api\(/.test(source) || /export \{ (GET|POST)/.test(source), file);
   }
 });
