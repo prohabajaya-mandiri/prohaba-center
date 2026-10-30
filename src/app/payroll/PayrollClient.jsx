@@ -1,7 +1,7 @@
 "use client";
 import { useState } from "react";
 import { useRouter } from "next/navigation";
-import { Info, Eye } from "lucide-react";
+import { AlertTriangle, Info, Eye } from "lucide-react";
 import { apiFetch, businessToday } from "@/lib/client-api";
 import { payrollTransition } from "@/lib/payroll-approval";
 import PaymentDialog from "@/components/PaymentDialog";
@@ -113,7 +113,10 @@ export default function PayrollClient({ payrolls, projects, accounts, user }) {
                   <td className="cell-title nowrap">{fmtPeriod(p.period)}</td>
                   <td>{p.projectName}</td>
                   <td className="num" style={{ fontWeight: 600, color: "var(--gray-900)" }}>{idr(p.totalAmount)}</td>
-                  <td><StatusBadge value={p.status} /></td>
+                  <td>
+                    <StatusBadge value={p.status} />
+                    {p.bankMissing > 0 && <span className="badge badge-warning" style={{ marginLeft: 6 }}>{p.bankMissing} rekening belum diisi</span>}
+                  </td>
                   <td className="num">
                     <button className="btn btn-outline btn-sm" onClick={() => { setError(""); setSelected(p); }}>
                       <Eye aria-hidden /> Rincian
@@ -167,6 +170,12 @@ export default function PayrollClient({ payrolls, projects, accounts, user }) {
                 <li key={s} className={`step ${i < stepIndex ? "done" : i === stepIndex ? "current" : ""}`}>{i + 1}. {l}</li>
               ))}
             </ol>
+            {selected.bankMissing > 0 && (
+              <p role="status" className="alert alert-warning">
+                <AlertTriangle aria-hidden />
+                Rekening belum diisi untuk {selected.bankMissing} pegawai. Payroll tetap dapat diproses; lengkapi rekening di Master Data → Karyawan sebelum transfer gaji.
+              </p>
+            )}
             <div className="table-wrapper" style={{ border: "1px solid var(--gray-200)", borderRadius: "var(--radius-md)" }}>
               <table>
                 <thead>
@@ -181,7 +190,10 @@ export default function PayrollClient({ payrolls, projects, accounts, user }) {
                 <tbody>
                   {(selected.items ?? []).map((i) => (
                     <tr key={i.id}>
-                      <td className="cell-title">{i.employeeName}</td>
+                      <td className="cell-title">
+                        {i.employeeName}
+                        {i.bankMissing && <span className="badge badge-warning" style={{ marginLeft: 6 }}>Rekening belum diisi</span>}
+                      </td>
                       <td className="num">{i.workDays}</td>
                       <td className="num">{idr(i.baseSalary)}</td>
                       <td className="num">{idr(i.overtimePay)}</td>

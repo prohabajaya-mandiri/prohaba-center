@@ -48,6 +48,8 @@ export function mirrorData(p, now = new Date()) {
     contractEndDate: day(p.contractEndDate),
     phoneWa: p.phoneWa ?? null,
     bankName: p.bankName ?? null,
+    // Umpan versi lama tanpa tanda rekening: biarkan nilai yang sudah tersalin.
+    ...(p.hasBankAccount !== undefined && { hasBankAccount: Boolean(p.hasBankAccount) }),
     bpjsKesehatan: p.bpjsKesehatan ?? null,
     bpjsKetenagakerjaan: p.bpjsKetenagakerjaan ?? null,
     joinDate: day(p.startDate),
@@ -55,6 +57,16 @@ export function mirrorData(p, now = new Date()) {
     hseUpdatedAt: day(p.updatedAt),
     syncedAt: now,
   };
+}
+
+/**
+ * Rekening opsional: pendataan dan payroll tidak diblokir, tetapi payroll menampilkan peringatan.
+ * Karyawan tertaut memakai tanda dari E-HSE (null = belum diterima, tidak diperingatkan);
+ * pegawai lama yang belum tertaut memakai kolom rekening lamanya.
+ */
+export function bankAccountMissing(e) {
+  if (typeof e?.hasBankAccount === "boolean") return !e.hasBankAccount;
+  return !e?.personnelId && !e?.bankAccount;
 }
 
 // Setelah tertaut, data pribadi lama dikosongkan: NIK/NPWP/rekening disimpan terenkripsi di E-HSE.
@@ -145,18 +157,18 @@ let running = null;
 // E-HSE versi lama tidak mengirim riwayat penempatan/MCU/permit: lewati pengisian awal sampai instance dimulai ulang.
 let feedOutdated = false;
 
-/** Pengisian awal penempatan, MCU dan permit untuk salinan yang belum pernah menerimanya (umpan berkursor tidak mengirim ulang baris lama). */
+/** Pengisian awal penempatan, MCU, permit dan tanda rekening untuk salinan yang belum pernah menerimanya (umpan berkursor tidak mengirim ulang baris lama). */
 async function backfillDetails() {
   if (feedOutdated) return 0;
   const pending = await prisma.employee.findMany({
-    where: { personnelId: { not: null }, OR: [{ placementsSyncedAt: null }, { hseHealthSyncedAt: null }] },
+    where: { personnelId: { not: null }, OR: [{ placementsSyncedAt: null }, { hseHealthSyncedAt: null }, { hasBankAccount: null }] },
     select: { personnelId: true },
     take: 1000,
   });
   let filled = 0;
   for (let i = 0; i < pending.length; i += 100) {
     const { rows } = await hseFetch(SYSTEM_ACTOR, "/personnel/changes?" + new URLSearchParams({ ids: pending.slice(i, i + 100).map((e) => e.personnelId).join(",") }));
-    if (rows.some((p) => !Array.isArray(p.placements) || !Array.isArray(p.permits))) {
+    if (rows.some((p) => !Array.isArray(p.placements) || !Array.isArray(p.permits) || typeof p.hasBankAccount !== "boolean")) {
       feedOutdated = true;
       break;
     }
