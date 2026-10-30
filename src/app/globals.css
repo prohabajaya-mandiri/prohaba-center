@@ -1593,3 +1593,12 @@ th { letter-spacing: 0.04em; }
   .table-cards td.cell-empty::before { content: none; }
   .toolbar .form-group { min-width: calc(50% - 6px); flex: 1; }
 }
+
+/* ─── Label QR gudang (50 × 30 mm, kertas stiker A4) ──────────────────── */
+.stock-label-sheet { display: flex; flex-wrap: wrap; gap: 3mm; }
+.stock-label { width: 50mm; height: 30mm; box-sizing: border-box; display: flex; align-items: center; gap: 2.5mm; padding: 2.5mm; border: 1px dashed var(--gray-300); background: #fff; color: #111; break-inside: avoid; page-break-inside: avoid; }
+.stock-label-code { width: 20mm; height: 20mm; flex-shrink: 0; }
+.stock-label-code svg { width: 100%; height: 100%; display: block; }
+.stock-label-info { flex: 1; min-width: 0; display: flex; flex-direction: column; gap: 0.8mm; font-size: 7pt; line-height: 1.2; }
+.stock-label-info strong { font-size: 7.5pt; white-space: nowrap; letter-spacing: -0.01em; }
+.stock-label-info span { overflow: hidden; display: -webkit-box; -webkit-line-clamp: 3; -webkit-box-orient: vertical; }

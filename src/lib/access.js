@@ -18,6 +18,7 @@ const moduleRoles = {
   'material-request': ['TOP_MANAGEMENT', 'PJO', 'LOGISTIK'],
   logistik: ['TOP_MANAGEMENT', 'PJO', 'LOGISTIK'],
   inventaris: ['TOP_MANAGEMENT', 'LOGISTIK', 'FINANCE', 'PJO'],
+  gudang: ['TOP_MANAGEMENT', 'LOGISTIK', 'FINANCE', 'PJO'],
   procurement: ['TOP_MANAGEMENT', 'LOGISTIK', 'FINANCE'],
   'site-purchase': ['TOP_MANAGEMENT', 'PJO', 'LOGISTIK', 'FINANCE'],
   finance: ['TOP_MANAGEMENT', 'FINANCE'], revenue: ['TOP_MANAGEMENT', 'FINANCE'],
@@ -43,6 +44,8 @@ export function canAccess(role, pathname, method = 'GET') {
   if (pathname.startsWith('/api/logistik/bbm/')) return ['TOP_MANAGEMENT', 'LOGISTIK'].includes(role);
   // Register aset hanya diubah admin aset (Logistik HO).
   if (moduleName === 'inventaris') return ['TOP_MANAGEMENT', 'LOGISTIK'].includes(role);
+  // Kartu stok gudang HO diubah oleh Logistik; pembatalan dokumen dibatasi lagi di service (Top Management).
+  if (moduleName === 'gudang') return ['TOP_MANAGEMENT', 'LOGISTIK'].includes(role);
   if (pathname === '/api/payroll/generate') return ['TOP_MANAGEMENT', 'HRD'].includes(role);
   return true;
 }
