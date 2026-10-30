@@ -51,6 +51,17 @@ export const MODULE_TABS = {
       ['import', 'Import register', ['TOP_MANAGEMENT', 'LOGISTIK']],
     ],
   },
+  '/gudang': {
+    param: 'tab',
+    items: [
+      ['stok', 'Stok barang'],
+      ['scan', 'Scan rak'],
+      ['transaksi', 'Transaksi & surat jalan'],
+      ['laporan', 'Laporan mingguan'],
+      ['lokasi', 'Lokasi & label'],
+      ['import', 'Import saldo awal', ['TOP_MANAGEMENT', 'LOGISTIK']],
+    ],
+  },
   '/finance': {
     param: 'tab',
     items: [

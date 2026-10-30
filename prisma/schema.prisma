@@ -45,6 +45,7 @@ model User {
   fuelStockCounts     FuelStockCount[]
   fuelRequests        FuelRequest[]
   assetsCreated       Asset[]           @relation("AssetCreator")
+  stockDocuments      StockDocument[]   @relation("StockDocCreator")
 }
 
 // ─── PROJECT ──────────────────────────────────────────────────────────────────
@@ -88,6 +89,7 @@ model Project {
   fuelShipments     FuelShipment[]
   fuelStockCounts   FuelStockCount[]
   fuelRequests      FuelRequest[]
+  stockDocuments    StockDocument[]
 
   @@index([hseSiteId, status])
 }
@@ -524,6 +526,7 @@ model Employee {
   fuelTaken    FuelLog[]
   placements   EmployeePlacement[]
   assetsUsed   Asset[]
+  stockTaken   StockDocument[]
   permits      EmployeePermit[]
 
   @@index([isActive, name])
@@ -1055,4 +1058,98 @@ model Asset {
   @@index([locationId, status])
   @@index([endUserEmployeeId])
   @@index([identifier])
+}
+
+// ─── GUDANG HO (PERSEDIAAN) ───────────────────────────────────────────────────
+// Kartu stok material gudang (docs/gudang-ho.md). Stok = jumlah StockMovement dari
+// dokumen yang tidak dibatalkan; tidak ada kolom saldo yang bisa diedit.
+
+model StockGroup {
+  code String @id // SAN | PPR | PVC | PJD | ELC | PLB | KIM | APD | UMM
+  name String
+
+  items StockItem[]
+}
+
+model StockItem {
+  id             String   @id @default(cuid())
+  sku            String   @unique // MTR-ELC-0012
+  groupCode      String
+  name           String
+  spec           String?
+  unit           String // bh | unit | set | psg | m | roll | lbr | btg | klg | ltr | gln | pcs
+  decimals       Boolean  @default(false) // jumlah boleh desimal (m, ltr)
+  minStock       Decimal? @db.Decimal(14, 3)
+  avgCost        Decimal  @default(0) @db.Decimal(20, 2) // rata-rata bergerak, dihitung ulang dari kartu stok
+  homeLocationId String?
+  notes          String?
+  isActive       Boolean  @default(true)
+  createdAt      DateTime @default(now())
+  updatedAt      DateTime @updatedAt
+
+  group        StockGroup      @relation(fields: [groupCode], references: [code])
+  homeLocation StockLocation?  @relation("StockItemHome", fields: [homeLocationId], references: [id])
+  movements    StockMovement[]
+
+  @@index([groupCode, name])
+}
+
+model StockLocation {
+  id          String  @id @default(cuid())
+  code        String  @unique // HO-R1-T3 | HO-R1-T3-B04 | HO-LT-02 | HO-PENAMPUNG
+  type        String // RAK | BIN | LANTAI | PENAMPUNG
+  warehouse   String  @default("HO")
+  parentId    String?
+  description String?
+  isActive    Boolean @default(true)
+
+  parent    StockLocation?  @relation("StockLocationTree", fields: [parentId], references: [id])
+  children  StockLocation[] @relation("StockLocationTree")
+  homeItems StockItem[]     @relation("StockItemHome")
+  movements StockMovement[]
+}
+
+model StockDocument {
+  id              String    @id @default(cuid())
+  number          String    @unique // GM-2026-000001
+  type            String // SALDO_AWAL | MASUK | KELUAR | RETUR | PINDAH
+  status          String    @default("SELESAI") // SELESAI | DIBATALKAN
+  docDate         DateTime
+  projectId       String?
+  destination     String? // tujuan selain proyek (Workshop, Mess HO) atau asal barang masuk
+  takerEmployeeId String?
+  takerName       String?
+  vehicleNo       String?
+  driverName      String?
+  notes           String?
+  cancelReason    String?
+  cancelledAt     DateTime?
+  cancelledById   String?
+  createdById     String
+  createdAt       DateTime  @default(now())
+
+  project   Project?        @relation(fields: [projectId], references: [id])
+  taker     Employee?       @relation(fields: [takerEmployeeId], references: [id])
+  createdBy User            @relation("StockDocCreator", fields: [createdById], references: [id])
+  movements StockMovement[]
+
+  @@index([type, docDate])
+  @@index([projectId, docDate])
+}
+
+model StockMovement {
+  id         String  @id @default(cuid())
+  documentId String
+  itemId     String
+  locationId String
+  qty        Decimal @db.Decimal(14, 3) // + masuk, − keluar
+  unitCost   Decimal @db.Decimal(20, 2)
+
+  document StockDocument @relation(fields: [documentId], references: [id], onDelete: Cascade)
+  item     StockItem     @relation(fields: [itemId], references: [id])
+  location StockLocation @relation(fields: [locationId], references: [id])
+
+  @@index([itemId, locationId])
+  @@index([locationId])
+  @@index([documentId])
 }
