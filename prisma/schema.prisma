@@ -492,6 +492,7 @@ model Employee {
   contractEndDate     DateTime?
   phoneWa             String?
   bankName            String?
+  hasBankAccount      Boolean? // no rekening terisi di E-HSE (tanpa nomornya); null = belum diterima dari umpan
   bpjsKetenagakerjaan String?
   bpjsKesehatan       String?
   joinDate            DateTime? // tanggal mulai di E-HSE

@@ -5,6 +5,7 @@ import { prisma } from "@/lib/prisma";
 import AppLayout from "@/components/AppLayout";
 import ListPager from "@/components/ListPager";
 import { pageQuery } from "@/lib/page-query";
+import { bankAccountMissing } from "@/lib/services/employees";
 import PayrollClient from "./PayrollClient";
 
 export const metadata = { title: 'Payroll' };
@@ -21,7 +22,7 @@ export default async function PayrollPage({ searchParams }) {
       include: {
         project: { select: { name: true } },
         items: {
-          include: { employee: { select: { name: true, position: true } } },
+          include: { employee: { select: { name: true, personnelId: true, hasBankAccount: true, bankAccount: true } } },
         },
         approvals: {
           include: { approver: { select: { name: true } } },
@@ -41,11 +42,11 @@ export default async function PayrollPage({ searchParams }) {
       take: 500,
     }),
   ]);
-  const payrolls = rows.map((p) => ({
-    ...p,
-    projectName: p.project.name,
-    items: p.items.map((i) => ({ ...i, employeeName: i.employee.name })),
-  }));
+  // Nomor rekening lama tidak dikirim ke klien; hanya tanda belum diisi.
+  const payrolls = rows.map((p) => {
+    const items = p.items.map(({ employee, ...i }) => ({ ...i, employeeName: employee.name, bankMissing: bankAccountMissing(employee) }));
+    return { ...p, projectName: p.project.name, items, bankMissing: items.filter((i) => i.bankMissing).length };
+  });
   return (
     <AppLayout
       title="Payroll"

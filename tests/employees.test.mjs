@@ -50,3 +50,24 @@ test("master data umum tidak lagi dapat menulis karyawan", async () => {
 test("berkas bersama identik dengan E-HSE (bila repo berdampingan)", { skip: !existsSync("../prohaba-hse/src/lib/domain/personnel.js") }, () => {
   for (const [from, to] of SHARED) assert.equal(normalize(readFileSync(to, "utf8")), normalize(readFileSync("../prohaba-hse/" + from, "utf8")), to);
 });
+
+test("rekening opsional: salinan hanya menyimpan tanda terisi, payroll diberi peringatan bila belum diisi", async () => {
+  const { mirrorData, bankAccountMissing } = await import("../src/lib/services/employees.js");
+  assert.equal(mirrorData({ id: "p1", hasBankAccount: false }).hasBankAccount, false);
+  assert.equal(mirrorData({ id: "p1", hasBankAccount: true, bankAccount: "1234567890" }).hasBankAccount, true);
+  assert.ok(!("bankAccount" in mirrorData({ id: "p1", hasBankAccount: true, bankAccount: "1234567890" })));
+  // Umpan versi lama tanpa tanda rekening tidak menyentuh nilai yang sudah tersalin.
+  assert.ok(!("hasBankAccount" in mirrorData({ id: "p1" })));
+  assert.equal(bankAccountMissing({ personnelId: "p1", hasBankAccount: false }), true);
+  assert.equal(bankAccountMissing({ personnelId: "p1", hasBankAccount: true }), false);
+  assert.equal(bankAccountMissing({ personnelId: "p1", hasBankAccount: null }), false); // belum diterima: tidak diperingatkan
+  assert.equal(bankAccountMissing({ personnelId: null, hasBankAccount: null, bankAccount: null }), true); // pegawai lama
+  assert.equal(bankAccountMissing({ personnelId: null, hasBankAccount: null, bankAccount: "0123456789" }), false);
+});
+
+test("form karyawan tidak menandai rekening sebagai wajib", () => {
+  const form = readFileSync("src/app/master-data/employees/EmployeeForm.jsx", "utf8");
+  const bank = form.slice(form.indexOf("section: 'Rekening"), form.lastIndexOf("bankAccountName"));
+  assert.match(bank, /Rekening \(opsional\)/);
+  assert.doesNotMatch(bank, /required/);
+});
