@@ -265,6 +265,12 @@ tampilan `/bbm`, tanpa mode offline.
 |---|---|
 | 1 | Master barang, lokasi, import saldo awal, label QR, transaksi masuk/keluar/pindah dari desktop, surat jalan, laporan mingguan |
 
+**Scan rak (sudah dibangun bersama tahap 1):** label QR rak membuka `/gudang/l/<kode>`; Logistik bisa **Ambil**
+(masuk keranjang), **Pindah**, atau **Simpan barang di rak ini** (penataan dari penampung/rak lain atau barang baru
+masuk). Lokasi utama barang otomatis diisi saat pertama kali ditata ke rak. Keranjang ambil dari beberapa rak
+diselesaikan di sub-menu **Scan rak** menjadi satu dokumen barang keluar + surat jalan. Scan kartu pengambil masih
+tahap 2.
+
 Catatan tahap 1: opname (`StockCount`) belum dibuat; pengambil dicatat dengan nama (scan kartu di tahap 2);
 barang hasil import masuk lokasi `HO-PENAMPUNG` lalu dipindah ke rak lewat transaksi **Pindah lokasi**;
 pembatalan dokumen hanya oleh Top Management dan harga rata-rata dihitung ulang dari kartu stok.

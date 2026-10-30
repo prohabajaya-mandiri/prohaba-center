@@ -212,7 +212,7 @@ export async function postDocument(body, user) {
   }
   if (type === "RETUR") ensure(projectId, "Pilih proyek asal retur.");
   const lines = array(body.lines, "Daftar barang", 200).map((l, i) => {
-    object(l, ["itemId", "locationId", "toLocationId", "qty", "unitCost"]);
+    object(l, ["itemId", "locationId", "toLocationId", "qty", "unitCost", "setHome"]);
     const n = `Baris ${i + 1}: `;
     return {
       itemId: text(l.itemId, n + "barang", 40),
@@ -220,6 +220,7 @@ export async function postDocument(body, user) {
       toLocationId: type === "PINDAH" ? text(l.toLocationId, n + "lokasi tujuan", 40) : null,
       qty: number(l.qty, n + "jumlah", 0.001, 1e9),
       unitCost: type === "MASUK" ? money(l.unitCost ?? 0, n + "harga satuan") : null,
+      setHome: l.setHome === true,
     };
   });
   for (const l of lines) ensure(type !== "PINDAH" || l.toLocationId !== l.locationId, "Lokasi asal dan tujuan pindah tidak boleh sama.");
@@ -272,6 +273,20 @@ export async function postDocument(body, user) {
         movements: { create: movements },
       },
     });
+    // Lokasi utama: diisi saat barang pertama kali ditata ke rak (masih kosong atau di penampung),
+    // atau bila diminta (centang "jadikan lokasi utama").
+    if (type !== "KELUAR") {
+      const holding = await tx.stockLocation.findUnique({ where: { code: HOLDING_LOCATION }, select: { id: true } });
+      for (const l of lines) {
+        const destination = type === "PINDAH" ? l.toLocationId : l.locationId;
+        const item = items.get(l.itemId);
+        const unplaced = !item.homeLocationId || item.homeLocationId === holding?.id;
+        if (destination !== holding?.id && (l.setHome || unplaced) && item.homeLocationId !== destination) {
+          await tx.stockItem.update({ where: { id: l.itemId }, data: { homeLocationId: destination } });
+          item.homeLocationId = destination;
+        }
+      }
+    }
     await refreshAverage(tx, [...items.keys()]);
     await audit(tx, user, "STOCK", "CREATE", doc.id, null, { number: doc.number, type, lines });
     return doc;

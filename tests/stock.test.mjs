@@ -1,7 +1,7 @@
 import test from "node:test";
 import assert from "node:assert/strict";
 import * as XLSX from "xlsx";
-import { averageCost, locationCode, normalizeUnit, weekRange, weeklyReport } from "../src/lib/stock.js";
+import { averageCost, locationCode, normalizeUnit, parseScan, weekRange, weeklyReport } from "../src/lib/stock.js";
 import { analyzeOpname, groupFor, readOpnameWorkbook } from "../src/lib/stock-import.js";
 import { canAccess } from "../src/lib/access.js";
 
@@ -17,6 +17,14 @@ test("location codes follow bay, level, bin and floor zones", () => {
   assert.equal(locationCode({ type: "RAK", bay: 1, level: 3 }), "HO-R1-T3");
   assert.equal(locationCode({ type: "BIN", bay: 2, level: 1, bin: 4 }), "HO-R2-T1-B04");
   assert.equal(locationCode({ type: "LANTAI", zone: 2 }), "HO-LT-02");
+});
+
+test("scanned labels resolve to a rack or an item", () => {
+  assert.deepEqual(parseScan("https://prohaba-center.vercel.app/gudang/l/HO-R1-T2-B01"), { kind: "location", code: "HO-R1-T2-B01" });
+  assert.deepEqual(parseScan("http://localhost:3000/gudang/b/MTR-ELC-0012"), { kind: "item", code: "MTR-ELC-0012" });
+  assert.deepEqual(parseScan(" ho-lt-02 "), { kind: "location", code: "HO-LT-02" });
+  assert.deepEqual(parseScan("MTR-SAN-0003"), { kind: "item", code: "MTR-SAN-0003" });
+  assert.equal(parseScan("PRHB1.PJM-000123.abc"), null);
 });
 
 test("moving average changes only on receipts", () => {

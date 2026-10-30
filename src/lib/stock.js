@@ -94,3 +94,17 @@ export function weeklyReport(items, movements, { start, end }) {
 }
 
 export const fmtQty = (v) => Number(v ?? 0).toLocaleString("id-ID", { maximumFractionDigits: 3 });
+
+/**
+ * Isi QR yang dipindai: URL label (…/gudang/l/HO-R1-T2, …/gudang/b/MTR-ELC-0001) atau kodenya saja
+ * (diketik manual atau dari pemindai USB).
+ */
+export function parseScan(value) {
+  const text = String(value ?? "").trim();
+  const path = text.match(/\/gudang\/([lb])\/([A-Za-z0-9-]+)\/?$/);
+  if (path) return { kind: path[1] === "l" ? "location" : "item", code: decodeURIComponent(path[2]).toUpperCase() };
+  const code = text.toUpperCase();
+  if (/^MTR-[A-Z]{3}-\d{4,}$/.test(code)) return { kind: "item", code };
+  if (/^[A-Z]{2,4}-[A-Z0-9-]+$/.test(code)) return { kind: "location", code };
+  return null;
+}

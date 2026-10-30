@@ -130,8 +130,8 @@ function DocumentDetail({ doc, isTop, onClose }) {
             <tbody>
               {doc.movements.map((m) => (
                 <tr key={m.id}>
-                  <td><div className="cell-title">{m.item.sku}</div><div className="cell-sub">{m.item.name}</div></td>
-                  <td>{m.location.code}</td>
+                  <td style={{ minWidth: 180 }}><div className="cell-title nowrap">{m.item.sku}</div><div className="cell-sub">{m.item.name}</div></td>
+                  <td className="nowrap">{m.location.code}</td>
                   <td className="num nowrap" style={{ color: Number(m.qty) < 0 ? 'var(--red-600)' : 'var(--green-700)' }}>{Number(m.qty) > 0 ? '+' : ''}{fmtQty(m.qty)} {m.item.unit}</td>
                   <td className="num nowrap">{idr(m.unitCost)}</td>
                 </tr>
@@ -156,8 +156,9 @@ function DocumentDetail({ doc, isTop, onClose }) {
   );
 }
 
-export default function DocumentList({ rows, filters, items, locations, projects, canEdit, isTop }) {
-  const [detail, setDetail] = useState(null);
+export default function DocumentList({ rows, filters, opened, items, locations, projects, canEdit, isTop }) {
+  // `opened`: dokumen dari tautan ?doc= (mis. setelah keranjang ambil disimpan) langsung terbuka.
+  const [detail, setDetail] = useState(opened);
   const [creating, setCreating] = useState(false);
   const [error, setError] = useState('');
 

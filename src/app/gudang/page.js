@@ -4,7 +4,7 @@ import { canAccess } from '@/lib/access';
 import { prisma } from '@/lib/prisma';
 import { pageQuery } from '@/lib/page-query';
 import { STOCK_ADMIN_ROLES } from '@/lib/stock';
-import { stockDocuments, stockItems, stockLocations, weeklyStock } from '@/lib/services/stock';
+import { stockDocument, stockDocuments, stockItems, stockLocations, weeklyStock } from '@/lib/services/stock';
 import { currentTab, tabLabel } from '@/lib/module-tabs';
 import { businessToday } from '@/lib/client-api';
 import AppLayout from '@/components/AppLayout';
@@ -14,6 +14,7 @@ import DocumentList from './DocumentList';
 import WeeklyReport from './WeeklyReport';
 import LocationList from './LocationList';
 import OpnameImport from './OpnameImport';
+import ScanStation from './ScanStation';
 
 export const metadata = {
   title: 'Gudang HO',
@@ -31,6 +32,11 @@ export default async function GudangPage({ searchParams }) {
   );
 
   if (tab === 'import') return layout(<OpnameImport />);
+
+  if (tab === 'scan') {
+    const projects = await prisma.project.findMany({ where: { status: 'ACTIVE' }, orderBy: { code: 'asc' }, select: { id: true, code: true, name: true } });
+    return layout(<ScanStation projects={projects} canEdit={canEdit} />);
+  }
 
   if (tab === 'lokasi') return layout(<LocationList locations={await stockLocations()} canEdit={canEdit} />);
 
@@ -54,7 +60,7 @@ export default async function GudangPage({ searchParams }) {
     const active = Object.fromEntries(Object.entries({ jenis: filters.type, proyek: filters.projectId }).filter(([, v]) => v));
     return layout(
       <>
-        <DocumentList rows={docs.rows} filters={filters} {...forms} />
+        <DocumentList rows={docs.rows} filters={filters} opened={typeof query.doc === 'string' ? await stockDocument(query.doc).catch(() => null) : null} {...forms} />
         <ListPager page={paging.page} total={docs.total} query={{ tab, ...active }} />
       </>,
     );
